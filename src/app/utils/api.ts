@@ -135,7 +135,20 @@ export async function processTextToNodes(
     }
   }
 
-  // Fallback: Supabase Edge Function
+  // Cloudflare Pages Function（APIキーはサーバー側に保管、クライアントには見えない）
+  try {
+    const response = await makeRequest('/api/process-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, informationLevel: level, textDensity: textDensity ?? 'high', systemPrompt }),
+    });
+    const data: ProcessTextResponse = await response.json();
+    return data.nodes;
+  } catch (cfError) {
+    console.warn('Cloudflare Function unavailable, falling back to Supabase:', cfError);
+  }
+
+  // 最終フォールバック: Supabase Edge Function
   try {
     const response = await makeRequest(`${API_BASE_URL}/process-text`, {
       method: 'POST',
@@ -152,13 +165,26 @@ export async function processTextToNodes(
 
 // Generate feedback (comments and questions)
 export async function generateFeedback(inputs: string[]): Promise<{ comments: string[], questions: string[] }> {
+  // Cloudflare Pages Function
+  try {
+    const response = await makeRequest('/api/generate-feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs }),
+    });
+    const data: FeedbackResponse = await response.json();
+    return data;
+  } catch (cfError) {
+    console.warn('Cloudflare Function unavailable, falling back to Supabase:', cfError);
+  }
+
+  // 最終フォールバック: Supabase Edge Function
   try {
     const response = await makeRequest(`${API_BASE_URL}/generate-feedback`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ inputs }),
     });
-
     const data: FeedbackResponse = await response.json();
     return data;
   } catch (error) {
