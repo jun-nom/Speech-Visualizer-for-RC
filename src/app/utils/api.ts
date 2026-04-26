@@ -50,117 +50,227 @@ async function makeRequest(url: string, options: RequestInit, retryCount = 0): P
   }
 }
 
-// Parse OpenAI JSON response into FlowNodes
-function parseTopicsToNodes(parsedContent: any): FlowNode[] {
+const NODE_QUANTITY_LIMITS: Record<string, { facts: number; insights: number }> = {
+  low:    { facts: 1, insights: 1 },
+  medium: { facts: 3, insights: 1 },
+  high:   { facts: 5, insights: 3 },
+};
+
+const CHAR_LIMITS: Record<string, number> = { high: 90, medium: 56, low: 32 };
+
+// Direct OpenAI call with an explicit API key
+async function callOpenAIDirect(messages: object[], apiKey: string, maxTokens: number, temperature: number): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-4o', messages, temperature, max_tokens: maxTokens }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error(`OpenAI error: ${response.status}`);
+  const result = await response.json();
+  return result.choices[0].message.content;
+}
+
+// Unified OpenAI caller:
+//   1. ローカルAPIキーあり → 直接呼び出し
+//   2. なし → Cloudflare プロキシ経由
+//   3. Cloudflare が 404（localhost等）→ Supabase からキーを取得して直接呼び出し
+async function callOpenAI(
+  messages: object[],
+  localApiKey: string,
+  maxTokens = 1000,
+  temperature = 0.2
+): Promise<string> {
+  if (localApiKey) {
+    return callOpenAIDirect(messages, localApiKey, maxTokens, temperature);
+  }
+
+  // Cloudflare proxy を試みる
+  try {
+    const response = await fetch('/api/process-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, max_tokens: maxTokens, temperature }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (response.ok) {
+      const result = await response.json();
+      return result.choices[0].message.content;
+    }
+    // 404 などのエラーは Supabase フォールバックへ
+  } catch { /* ネットワークエラーも Supabase フォールバックへ */ }
+
+  // Supabase からAPIキーを取得して直接呼び出し
+  const keyRes = await fetch(`${API_BASE_URL}/openai-key`, { headers });
+  if (!keyRes.ok) throw new Error('API_KEY_UNAVAILABLE');
+  const { key } = await keyRes.json();
+  if (!key) throw new Error('API_KEY_UNAVAILABLE');
+  return callOpenAIDirect(messages, key, maxTokens, temperature);
+}
+
+// Parse OpenAI JSON response into FlowNodes (slice is a final safety net)
+function parseTopicsToNodes(parsedContent: any, nodeQuantity: string = 'medium'): FlowNode[] {
+  const limits = NODE_QUANTITY_LIMITS[nodeQuantity] ?? NODE_QUANTITY_LIMITS.medium;
   const nodes: FlowNode[] = [];
   let counter = Date.now();
   parsedContent.topics.forEach((topic: any, topicIndex: number) => {
     if (!topic.title || !Array.isArray(topic.facts) || !Array.isArray(topic.insights)) return;
     const topicId = `topic-${counter}-${topicIndex}`;
     nodes.push({ id: `node-${counter++}-title`, type: 'title', content: topic.title, topicId });
-    topic.facts.forEach((fact: string, i: number) =>
+    topic.facts.slice(0, limits.facts).forEach((fact: string, i: number) =>
       nodes.push({ id: `node-${counter++}-fact-${i}`, type: 'fact', content: fact, topicId })
     );
-    topic.insights.forEach((insight: string, i: number) =>
+    topic.insights.slice(0, limits.insights).forEach((insight: string, i: number) =>
       nodes.push({ id: `node-${counter++}-insight-${i}`, type: 'insight', content: insight, topicId })
     );
   });
   return nodes;
 }
 
-// Call OpenAI directly from the client using the user's API key
-async function processTextWithOpenAIDirect(
-  text: string,
-  informationLevel: string,
-  systemPrompt: string,
-  openaiApiKey: string
-): Promise<FlowNode[]> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openaiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `トピック量レベル: ${informationLevel}\n\n以下のテキストを分析してください：\n\n${text}` },
-      ],
-      temperature: 0.2,
-      max_tokens: 1000,
-    }),
+// Consolidate items exceeding the node count limit
+async function consolidateItems(
+  items: string[], maxCount: number, type: 'facts' | 'insights', apiKey: string
+): Promise<string[]> {
+  const typeLabel = type === 'facts' ? '客観的事実' : '主観的洞察';
+  try {
+    const content = await callOpenAI([
+      {
+        role: 'system',
+        content: `以下の複数の${typeLabel}を、情報を損なわずに${maxCount}つの項目にまとめてください。番号付きリスト形式（1. ～ ${maxCount}. ）で返してください。JSON等の余分な形式は不要です。`,
+      },
+      { role: 'user', content: items.map((item, i) => `${i + 1}. ${item}`).join('\n') },
+    ], apiKey, 400);
+    const lines = content.split('\n').filter(l => l.trim())
+      .map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(l => l.length > 0);
+    return lines.length > 0 ? lines.slice(0, maxCount) : items.slice(0, maxCount);
+  } catch {
+    return items.slice(0, maxCount);
+  }
+}
+
+// Enforce node count limits by consolidating excess items
+async function enforceNodeLimits(parsedContent: any, nodeQuantity: string, apiKey: string): Promise<any> {
+  const limits = NODE_QUANTITY_LIMITS[nodeQuantity] ?? NODE_QUANTITY_LIMITS.medium;
+  for (const topic of parsedContent.topics) {
+    if (Array.isArray(topic.facts) && topic.facts.length > limits.facts)
+      topic.facts = await consolidateItems(topic.facts, limits.facts, 'facts', apiKey);
+    if (Array.isArray(topic.insights) && topic.insights.length > limits.insights)
+      topic.insights = await consolidateItems(topic.insights, limits.insights, 'insights', apiKey);
+  }
+  return parsedContent;
+}
+
+const CHAR_MIN_LIMITS: Record<string, number> = { high: 32, medium: 24, low: 2 };
+
+// Enforce text density: shorten items over the max, expand items under the min
+async function enforceTextDensity(parsedContent: any, textDensity: string, apiKey: string): Promise<any> {
+  const maxLimit = CHAR_LIMITS[textDensity] ?? 90;
+  const minLimit = CHAR_MIN_LIMITS[textDensity] ?? 2;
+
+  type AdjustItem = { topicIndex: number; field: 'facts' | 'insights'; itemIndex: number; text: string };
+  const overItems: AdjustItem[] = [];
+  const underItems: AdjustItem[] = [];
+
+  parsedContent.topics.forEach((topic: any, ti: number) => {
+    (['facts', 'insights'] as const).forEach(field => {
+      if (Array.isArray(topic[field]))
+        topic[field].forEach((item: string, ii: number) => {
+          if (typeof item !== 'string') return;
+          if (item.length > maxLimit)
+            overItems.push({ topicIndex: ti, field, itemIndex: ii, text: item });
+          else if (item.length < minLimit)
+            underItems.push({ topicIndex: ti, field, itemIndex: ii, text: item });
+        });
+    });
   });
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`);
+  // Shorten items exceeding the max
+  if (overItems.length > 0) {
+    // テキスト量：多の場合は「80〜100文字で書き直す」、それ以外は上限以内に収める
+    const shortenInstruction = textDensity === 'high'
+      ? `以下の各テキスト項目を、情報密度を最大化しつつ80〜100文字になるよう書き直してください。数字・固有名詞・手法名はそのまま残し、記号（→・/・:）や略語を活用して凝縮すること。番号付きリストの形式を維持し、各項目を1行で返してください。`
+      : `以下の各テキスト項目を、必ず${maxLimit}文字以内に収めて書き直してください。番号付きリストの形式を維持し、各項目を1行で返してください。`;
+
+    try {
+      const content = await callOpenAI([
+        { role: 'system', content: shortenInstruction },
+        { role: 'user', content: overItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n') },
+      ], apiKey, 400, 0.1);
+      const lines = content.split('\n').filter(l => l.trim());
+      overItems.forEach((item, i) => {
+        const result = (lines[i] ?? '').replace(/^\d+\.\s*/, '').trim();
+        if (result) parsedContent.topics[item.topicIndex][item.field][item.itemIndex] = result;
+      });
+    } catch { /* keep original on error */ }
   }
 
-  const result = await response.json();
-  const content: string = result.choices[0].message.content;
+  // Expand items below the min
+  if (underItems.length > 0) {
+    const expandInstruction = textDensity === 'high'
+      ? `以下の各テキスト項目を、情報密度を最大化して書き直してください。数字・割合・固有名詞・手法名はそのまま使い、「〜について話した」「〜が重要」のような抽象表現は禁止。記号（→・/・:）や略語を積極活用し、80〜100文字で記述すること。番号付きリストの形式を維持し、各項目を1行で返してください。`
+      : textDensity === 'medium'
+      ? `以下の各テキスト項目について、意味・文脈が正確に伝わるよういくらか詳しく書き直してください。具体的な内容を含め、情報を充実させることを優先し、${minLimit}文字以上${maxLimit}文字以内で記述すること。番号付きリストの形式を維持し、各項目を1行で返してください。`
+      : `以下の各テキスト項目を、意味を保ちつつ${minLimit}文字以上${maxLimit}文字以内になるよう書き直してください。番号付きリストの形式を維持し、各項目を1行で返してください。`;
+
+    try {
+      const content = await callOpenAI([
+        { role: 'system', content: expandInstruction },
+        { role: 'user', content: underItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n') },
+      ], apiKey, 400, 0.2);
+      const lines = content.split('\n').filter(l => l.trim());
+      underItems.forEach((item, i) => {
+        const result = (lines[i] ?? '').replace(/^\d+\.\s*/, '').trim();
+        if (result) parsedContent.topics[item.topicIndex][item.field][item.itemIndex] = result;
+      });
+    } catch { /* keep original on error */ }
+  }
+
+  return parsedContent;
+}
+
+// Process text: call OpenAI, parse, enforce limits — all logic runs client-side
+async function processText(
+  text: string,
+  systemPrompt: string,
+  nodeQuantity: string,
+  textDensity: string,
+  apiKey: string
+): Promise<FlowNode[]> {
+  const content = await callOpenAI([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `以下のテキストを分析してください：\n\n${text}` },
+  ], apiKey, 1000);
 
   let parsed: any;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
+  try { parsed = JSON.parse(content); } catch {
     const match = content.match(/\{[\s\S]*\}/);
     if (match) parsed = JSON.parse(match[0]);
   }
-
   if (!parsed?.topics) throw new Error('Failed to parse OpenAI response');
-  return parseTopicsToNodes(parsed);
+
+  parsed = await enforceNodeLimits(parsed, nodeQuantity, apiKey);
+  parsed = await enforceTextDensity(parsed, textDensity, apiKey);
+  return parseTopicsToNodes(parsed, nodeQuantity);
 }
 
-// Process text to speech flow nodes
+// Process text to speech flow nodes — all logic runs client-side
 export async function processTextToNodes(
   text: string,
   existingNodeCount: number,
   sessionId: string,
   informationLevel?: string,
+  nodeQuantity?: string,
   textDensity?: string
 ): Promise<FlowNode[]> {
   const level = informationLevel ?? 'high';
-  const systemPrompt = buildSystemPrompt(textDensity ?? 'high');
-
-  // Use direct OpenAI call if API key is configured in app settings
-  const openaiApiKey = typeof window !== 'undefined'
+  const nq = nodeQuantity ?? 'medium';
+  const td = textDensity ?? 'high';
+  const systemPrompt = buildSystemPrompt(td, level, nq);
+  const localApiKey = typeof window !== 'undefined'
     ? localStorage.getItem('speechflow-openai-key') ?? ''
     : '';
 
-  if (openaiApiKey) {
-    try {
-      return await processTextWithOpenAIDirect(text, level, systemPrompt, openaiApiKey);
-    } catch (error) {
-      console.warn('Direct OpenAI call failed, falling back to server:', error);
-    }
-  }
-
-  // Cloudflare Pages Function（APIキーはサーバー側に保管、クライアントには見えない）
-  try {
-    const response = await makeRequest('/api/process-text', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, informationLevel: level, textDensity: textDensity ?? 'high', systemPrompt }),
-    });
-    const data: ProcessTextResponse = await response.json();
-    return data.nodes;
-  } catch (cfError) {
-    console.warn('Cloudflare Function unavailable, falling back to Supabase:', cfError);
-  }
-
-  // 最終フォールバック: Supabase Edge Function
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/process-text`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ text, existingNodeCount, sessionId, informationLevel, textDensity, systemPrompt }),
-    });
-    const data: ProcessTextResponse = await response.json();
-    return data.nodes;
-  } catch (error) {
-    console.error('Error processing text to nodes:', error);
-    throw error;
-  }
+  return processText(text, systemPrompt, nq, td, localApiKey);
 }
 
 // Generate feedback (comments and questions)

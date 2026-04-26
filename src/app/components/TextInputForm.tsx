@@ -7,6 +7,7 @@ import { toast } from 'sonner@2.0.3';
 
 export type InformationLevel = 'high' | 'medium' | 'low';
 export type TextDensity = 'high' | 'medium' | 'low';
+export type NodeQuantity = 'high' | 'medium' | 'low';
 
 interface TextInputFormProps {
   value: string;
@@ -16,6 +17,8 @@ interface TextInputFormProps {
   inputHistory: string[];
   informationLevel: InformationLevel;
   onInformationLevelChange: (level: InformationLevel) => void;
+  nodeQuantity?: NodeQuantity;
+  onNodeQuantityChange?: (quantity: NodeQuantity) => void;
   textDensity?: TextDensity;
   onTextDensityChange?: (density: TextDensity) => void;
   isProcessing?: boolean;
@@ -33,6 +36,8 @@ export function TextInputForm({
   inputHistory,
   informationLevel,
   onInformationLevelChange,
+  nodeQuantity = 'medium',
+  onNodeQuantityChange,
   textDensity = 'medium',
   onTextDensityChange,
   isProcessing = false,
@@ -179,6 +184,16 @@ export function TextInputForm({
                   <SelectItem value="low">トピック量：少</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={nodeQuantity} onValueChange={onNodeQuantityChange}>
+                <SelectTrigger className="w-[120px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="high">ノード量：多</SelectItem>
+                  <SelectItem value="medium">ノード量：中</SelectItem>
+                  <SelectItem value="low">ノード量：少</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={textDensity} onValueChange={onTextDensityChange}>
                 <SelectTrigger className="w-[120px] text-xs">
                   <SelectValue />
@@ -220,6 +235,7 @@ export function TextInputForm({
       {userRole !== 'viewer' && (
         <form onSubmit={handleSubmit} className="space-y-3">
           <Textarea
+            id="rc_speech_text_inptut"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}

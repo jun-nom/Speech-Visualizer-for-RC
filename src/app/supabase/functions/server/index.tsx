@@ -242,7 +242,7 @@ app.post('/make-server-a0d800ba/process-text', async (c) => {
       return c.json({ error: 'Text is required' }, 400);
     }
 
-    const textDensityLimits: Record<string, number> = { high: 80, medium: 56, low: 32 };
+    const textDensityLimits: Record<string, number> = { high: 90, medium: 56, low: 32 };
     const textDensityLimit = textDensityLimits[textDensity] ?? 80;
 
     console.log('Processing text:', text.substring(0, 100) + '...');
@@ -405,6 +405,75 @@ ${text}`
     }
 
     console.log('Successfully parsed', parsedContent.topics.length, 'topics');
+
+    // Re-summarize any items exceeding the character limit (up to 2 attempts)
+    const collectOverLimit = () => {
+      const items: { topicIndex: number; field: 'facts' | 'insights'; itemIndex: number; text: string }[] = [];
+      parsedContent.topics.forEach((topic: any, ti: number) => {
+        (['facts', 'insights'] as const).forEach(field => {
+          if (Array.isArray(topic[field])) {
+            topic[field].forEach((item: string, ii: number) => {
+              if (typeof item === 'string' && item.length > textDensityLimit) {
+                items.push({ topicIndex: ti, field, itemIndex: ii, text: item });
+              }
+            });
+          }
+        });
+      });
+      return items;
+    };
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const overLimitItems = collectOverLimit();
+      if (overLimitItems.length === 0) break;
+
+      console.log(`Attempt ${attempt + 1}: ${overLimitItems.length} item(s) exceeding ${textDensityLimit} chars, re-summarizing...`);
+      const itemListText = overLimitItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n');
+
+      const retryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: `以下の各テキスト項目を、必ず${textDensityLimit}文字以内に収めて要約してください。
+${textDensityLimit}文字を1文字でも超えることは絶対に禁止です。意味が伝わる範囲で最大限短くしてください。
+番号付きリストの形式を維持し、各項目を1行で返してください。JSON等の余分な形式は不要です。`,
+            },
+            {
+              role: 'user',
+              content: itemListText,
+            }
+          ],
+          temperature: 0.1,
+          max_tokens: 400,
+        })
+      });
+
+      if (!retryResponse.ok) {
+        console.warn(`Re-summarization attempt ${attempt + 1} failed`);
+        break;
+      }
+
+      const retryResult = await retryResponse.json();
+      const retryContent: string = retryResult.choices?.[0]?.message?.content ?? '';
+      const retryLines = retryContent.split('\n').filter((l: string) => l.trim());
+
+      overLimitItems.forEach((item, i) => {
+        const line = retryLines[i] ?? '';
+        const summarized = line.replace(/^\d+\.\s*/, '').trim();
+        if (summarized) {
+          parsedContent.topics[item.topicIndex][item.field][item.itemIndex] = summarized;
+          console.log(`Re-summarized [${item.field}][${item.itemIndex}]: "${item.text}" → "${summarized}" (${summarized.length}文字)`);
+        }
+      });
+    }
+    }
 
     // Generate nodes without positioning (CSS flexbox handles layout)
     const nodes: FlowNode[] = [];
@@ -763,6 +832,13 @@ app.post('/make-server-a0d800ba/delete-sessions-bulk', async (c) => {
 // Health check
 app.get('/make-server-a0d800ba/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Return OpenAI API key so the client can call OpenAI directly
+app.get('/make-server-a0d800ba/openai-key', (c) => {
+  const key = Deno.env.get('OPENAI_API_KEY') ?? '';
+  if (!key) return c.json({ error: 'OPENAI_API_KEY not configured' }, 500);
+  return c.json({ key });
 });
 
 // Clean up dummy sessions (one-time utility endpoint)

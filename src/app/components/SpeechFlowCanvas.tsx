@@ -21,68 +21,14 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId }: Speec
       groups[node.topicId].push(node);
     });
     
-    // Sort nodes within each group: title first, then descriptions
+    // Sort nodes within each group: title first, then facts, then insights
     Object.keys(groups).forEach(topicId => {
       groups[topicId].sort((a, b) => {
-        if (a.type === 'title' && b.type !== 'title') return -1;
-        if (a.type !== 'title' && b.type === 'title') return 1;
-        return 0;
+        const order: Record<string, number> = { title: 0, fact: 1, insight: 2 };
+        return (order[a.type] ?? 1) - (order[b.type] ?? 1);
       });
     });
-    
-    // Consolidate nodes within each topic: merge multiple fact nodes and multiple insight nodes
-    Object.keys(groups).forEach(topicId => {
-      const topicNodes = groups[topicId];
-      const consolidatedNodes: FlowNodeType[] = [];
-      
-      // Separate nodes by type
-      const titleNodes = topicNodes.filter(node => node.type === 'title');
-      const factNodes = topicNodes.filter(node => node.type === 'fact');
-      const insightNodes = topicNodes.filter(node => node.type === 'insight');
-      
-      // Add title nodes (should be only one, but keep all just in case)
-      consolidatedNodes.push(...titleNodes);
-      
-      // Consolidate fact nodes
-      if (factNodes.length > 1) {
-        // Merge multiple fact nodes into one with bullet points
-        const consolidatedFactContent = factNodes.map(node => {
-          // If content already starts with bullet point, use as is, otherwise add bullet point
-          return node.content.startsWith('・') ? node.content : `・${node.content}`;
-        }).join('\n');
-        
-        consolidatedNodes.push({
-          id: `consolidated-fact-${topicId}`,
-          type: 'fact',
-          content: consolidatedFactContent,
-          topicId: topicId
-        });
-      } else if (factNodes.length === 1) {
-        consolidatedNodes.push(factNodes[0]);
-      }
-      
-      // Consolidate insight nodes
-      if (insightNodes.length > 1) {
-        // Merge multiple insight nodes into one with bullet points
-        const consolidatedInsightContent = insightNodes.map(node => {
-          // If content already starts with bullet point, use as is, otherwise add bullet point
-          return node.content.startsWith('・') ? node.content : `・${node.content}`;
-        }).join('\n');
-        
-        consolidatedNodes.push({
-          id: `consolidated-insight-${topicId}`,
-          type: 'insight',
-          content: consolidatedInsightContent,
-          topicId: topicId
-        });
-      } else if (insightNodes.length === 1) {
-        consolidatedNodes.push(insightNodes[0]);
-      }
-      
-      // Update the group with consolidated nodes
-      groups[topicId] = consolidatedNodes;
-    });
-    
+
     return groups;
   }, [nodes]);
 
@@ -224,25 +170,22 @@ function FlowNode({ node, onCopy }: FlowNodeProps) {
     }
   };
   
-  // Split content by newlines to handle bullet points properly
-  const contentLines = node.content.split('\n');
-  
+  const lines = node.content.split('\n');
+
   return (
     <div
       className={`speech-flow-node select-none cursor-pointer ${getNodeStyles()} border rounded-lg p-3 shadow-sm hover:shadow-md transition-all hover:bg-opacity-80`}
       style={{
         fontSize: '12px',
-        lineHeight: '1.4',
+        lineHeight: '1.6',
         minHeight: node.type === 'title' ? '40px' : '45px',
         wordBreak: 'break-word'
       }}
       onClick={() => onCopy(node.content)}
       title="クリックでコピー"
     >
-      {contentLines.map((line, index) => (
-        <div key={index}>
-          {line}
-        </div>
+      {lines.map((line, i) => (
+        <div key={i}>{line}</div>
       ))}
     </div>
   );

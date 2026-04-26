@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SpeechFlowCanvas } from './components/SpeechFlowCanvas';
-import { TextInputForm, InformationLevel, TextDensity } from './components/TextInputForm';
+import { TextInputForm, InformationLevel, TextDensity, NodeQuantity } from './components/TextInputForm';
 import { SessionManager } from './components/SessionManager';
 import { FeedbackGenerator } from './components/FeedbackGenerator';
 import { Button } from './components/ui/button';
@@ -119,6 +119,14 @@ export default function App() {
     return 'high';
   });
 
+  // Node quantity state with localStorage persistence
+  const [nodeQuantity, setNodeQuantity] = useState<NodeQuantity>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('speechflow-node-quantity') as NodeQuantity) || 'medium';
+    }
+    return 'medium';
+  });
+
   // Text density state with localStorage persistence
   const [textDensity, setTextDensity] = useState<TextDensity>(() => {
     if (typeof window !== 'undefined') {
@@ -158,6 +166,13 @@ export default function App() {
     setInformationLevel(level);
     if (typeof window !== 'undefined') {
       localStorage.setItem('speechflow-information-level', level);
+    }
+  };
+
+  const handleNodeQuantityChange = (quantity: NodeQuantity) => {
+    setNodeQuantity(quantity);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('speechflow-node-quantity', quantity);
     }
   };
 
@@ -510,7 +525,7 @@ export default function App() {
       let newNodes: FlowNode[];
       
       try {
-        newNodes = await api.processTextToNodes(text, existingTopicCount, activeSession.id, informationLevel, textDensity);
+        newNodes = await api.processTextToNodes(text, existingTopicCount, activeSession.id, informationLevel, nodeQuantity, textDensity);
         
         // Filter out insight nodes that contain "追加の分析が必要です"
         newNodes = newNodes.filter(node => {
@@ -522,21 +537,24 @@ export default function App() {
         });
         
       } catch (apiError) {
-        console.warn('API call failed, using fallback:', apiError);
-        
-        // Check if the error contains specific OpenAI-related messages
-        const errorMessage = (apiError instanceof Error ? apiError.message : 'Unknown error').toLowerCase();
-        
-        if (errorMessage.includes('openai') || errorMessage.includes('api key') || errorMessage.includes('rate limit') || isOfflineMode) {
-          // Use local fallback when OpenAI API is having issues or in offline mode
+        console.warn('API call failed:', apiError);
+        const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
+
+        if (errorMessage === 'API_KEY_UNAVAILABLE') {
+          toast.error('APIキーを設定してください');
+          return;
+        }
+
+        if (errorMessage.toLowerCase().includes('rate limit') || isOfflineMode) {
           newNodes = await api.generateFallbackNodes(text, existingTopicCount);
           if (isOfflineMode) {
             toast.info('オフラインモードで基本処理を実行しました');
           } else {
-            toast.error('OpenAI APIに接続できません。基本的な処理で継続します。');
+            toast.error('OpenAI APIのレート制限に達しました。しばらくしてから再試行してください。');
           }
         } else {
-          throw apiError; // Re-throw if it's a different kind of error
+          toast.error(`処理中にエラーが発生しました: ${errorMessage}`);
+          return;
         }
       }
       
@@ -932,6 +950,8 @@ export default function App() {
               inputHistory={inputHistory}
               informationLevel={informationLevel}
               onInformationLevelChange={handleInformationLevelChange}
+              nodeQuantity={nodeQuantity}
+              onNodeQuantityChange={handleNodeQuantityChange}
               textDensity={textDensity}
               onTextDensityChange={handleTextDensityChange}
               isProcessing={isProcessing}
