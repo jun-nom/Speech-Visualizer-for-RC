@@ -171,7 +171,7 @@ async function consolidateItems(
         content: `以下の複数の${typeLabel}を、情報を損なわずに${maxCount}つの項目にまとめてください。番号付きリスト形式（1. ～ ${maxCount}. ）で返してください。JSON等の余分な形式は不要です。`,
       },
       { role: 'user', content: items.map((item, i) => `${i + 1}. ${item}`).join('\n') },
-    ], apiKey, 400);
+    ], apiKey, 800);
     const lines = content.split('\n').filter(l => l.trim())
       .map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(l => l.length > 0);
     return lines.length > 0 ? lines.slice(0, maxCount) : items.slice(0, maxCount);
@@ -223,7 +223,7 @@ async function enforceTextDensity(parsedContent: any, textDensity: string, apiKe
       const content = await callOpenAI([
         { role: 'system', content: shortenInstruction },
         { role: 'user', content: overItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n') },
-      ], apiKey, 400, 0.1);
+      ], apiKey, 800, 0.1);
       const lines = content.split('\n').filter(l => l.trim());
       overItems.forEach((item, i) => {
         const result = (lines[i] ?? '').replace(/^\d+\.\s*/, '').trim();
@@ -243,7 +243,7 @@ async function enforceTextDensity(parsedContent: any, textDensity: string, apiKe
       const content = await callOpenAI([
         { role: 'system', content: expandInstruction },
         { role: 'user', content: underItems.map((item, i) => `${i + 1}. ${item.text}`).join('\n') },
-      ], apiKey, 400, 0.2);
+      ], apiKey, 800, 0.2);
       const lines = content.split('\n').filter(l => l.trim());
       underItems.forEach((item, i) => {
         const result = (lines[i] ?? '').replace(/^\d+\.\s*/, '').trim();
@@ -253,6 +253,19 @@ async function enforceTextDensity(parsedContent: any, textDensity: string, apiKe
   }
 
   return parsedContent;
+}
+
+function extractJSON(content: string): any {
+  // Strip markdown code blocks
+  const stripped = content.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+  try { return JSON.parse(stripped); } catch { /* continue */ }
+  // Find outermost {...}
+  const start = content.indexOf('{');
+  const end = content.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(content.slice(start, end + 1)); } catch { /* continue */ }
+  }
+  return null;
 }
 
 async function processText(
@@ -265,13 +278,9 @@ async function processText(
   const content = await callOpenAI([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: `以下のテキストを分析してください：\n\n${text}` },
-  ], apiKey, 1000);
+  ], apiKey, 3000);
 
-  let parsed: any;
-  try { parsed = JSON.parse(content); } catch {
-    const match = content.match(/\{[\s\S]*\}/);
-    if (match) parsed = JSON.parse(match[0]);
-  }
+  let parsed = extractJSON(content);
   if (!parsed?.topics) throw new Error('Failed to parse OpenAI response');
 
   parsed = await enforceNodeLimits(parsed, nodeQuantity, apiKey);
