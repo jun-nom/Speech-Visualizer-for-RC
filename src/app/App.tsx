@@ -8,6 +8,7 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
 import * as api from './utils/api';
 import { SettingsDialog } from './components/SettingsDialog';
+import { LogViewer } from './components/LogViewer';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
 
 export interface FlowNode {
@@ -52,6 +53,8 @@ export default function App() {
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<api.SupabaseStatus | null>(null);
+  const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -149,6 +152,19 @@ export default function App() {
     return [];
   };
 
+  // Supabase health check on mount
+  useEffect(() => {
+    api.checkSupabaseHealth().then(setSupabaseStatus);
+  }, []);
+
+  const saveToSupabase = (session: Session) => {
+    if (supabaseStatus === 'quota_exceeded' || supabaseStatus === 'error') return;
+    api.saveSessionToSupabase(session).catch((err: any) => {
+      if (err?.isQuotaExceeded) setSupabaseStatus('quota_exceeded');
+      console.warn('Supabase save failed:', err);
+    });
+  };
+
   const createNewSession = async () => {
     if (isCreatingSession) return;
     setIsCreatingSession(true);
@@ -169,6 +185,7 @@ export default function App() {
       setInputHistory([]);
       setFeedback({ comments: [], questions: [] });
       saveSessionsToLocal(updatedSessions);
+      saveToSupabase(newSession);
       toast.success('新しいセッションを作成しました');
     } catch (error) {
       toast.error('セッション作成中にエラーが発生しました');
@@ -260,6 +277,8 @@ export default function App() {
       );
       setSessions(updatedSessionsWithNodes);
       saveSessionsToLocal(updatedSessionsWithNodes);
+      const savedSession = updatedSessionsWithNodes.find(s => s.isActive);
+      if (savedSession) saveToSupabase(savedSession);
 
       setCurrentInput('');
       toast.success('スピーチフローに追加しました');
@@ -402,9 +421,21 @@ export default function App() {
     <div className="speech-flow-app min-h-screen bg-gray-50">
       {/* Header */}
       <header className="speech-flow-header bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-start justify-between">
-          <h1 className="text-xl">スピーチフロー可視化ツール</h1>
-          <div className="flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl">スピーチフロー可視化ツール</h1>
+            {(supabaseStatus === 'quota_exceeded' || supabaseStatus === 'error') && (
+              <span className="text-xs text-amber-600">
+                {supabaseStatus === 'quota_exceeded'
+                  ? 'Supabaseのデータ転送量超過。データはローカルに保存されます。'
+                  : 'Supabaseに接続できません。データはローカルに保存されます。'}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setIsLogViewerOpen(true)} className="text-xs text-gray-500">
+              ログ
+            </Button>
             <SettingsDialog
               openaiApiKey={openaiApiKey}
               onOpenaiApiKeyChange={handleOpenaiApiKeyChange}
@@ -414,6 +445,13 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      <LogViewer
+        isOpen={isLogViewerOpen}
+        onClose={() => setIsLogViewerOpen(false)}
+        supabaseStatus={supabaseStatus}
+        onSupabaseStatusChange={setSupabaseStatus}
+      />
 
       <div className="speech-flow-main flex h-[calc(100vh-80px)]">
         {/* Left Sidebar - Session Management - Fixed 280px */}

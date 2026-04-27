@@ -1,6 +1,76 @@
 import { FlowNode, Session } from '../App';
 import { buildSystemPrompt, TEXT_DENSITY_LIMITS } from './systemPrompt';
 
+const SUPABASE_FUNCTION_URL = 'https://rffmaybcysvzppypigft.supabase.co/functions/v1/make-server-a0d800ba';
+const supabaseHeaders = {
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmZm1heWJjeXN2enBweXBpZ2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODQ2NTAsImV4cCI6MjA3MDc2MDY1MH0.fS7j5wGvv_9hHc4gSBydDQCBa_y23ocI0Fx3G_TM-zY',
+};
+
+export type SupabaseStatus = 'ok' | 'quota_exceeded' | 'error';
+
+class QuotaExceededError extends Error {
+  isQuotaExceeded = true;
+  constructor() { super('quota_exceeded'); }
+}
+
+function assertSupabaseOk(response: Response) {
+  if (response.status === 402) throw new QuotaExceededError();
+  if (!response.ok) throw new Error(`Supabase error: ${response.status}`);
+}
+
+export async function checkSupabaseHealth(): Promise<SupabaseStatus> {
+  try {
+    const res = await fetch(`${SUPABASE_FUNCTION_URL}/health`, {
+      headers: supabaseHeaders,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.status === 402) return 'quota_exceeded';
+    return res.ok ? 'ok' : 'error';
+  } catch {
+    return 'error';
+  }
+}
+
+export async function saveSessionToSupabase(session: Session): Promise<void> {
+  const res = await fetch(`${SUPABASE_FUNCTION_URL}/save-session`, {
+    method: 'POST',
+    headers: supabaseHeaders,
+    body: JSON.stringify({ ...session, createdAt: session.createdAt.toISOString() }),
+    signal: AbortSignal.timeout(15000),
+  });
+  assertSupabaseOk(res);
+}
+
+export async function loadAllSessionsFromSupabase(): Promise<Session[]> {
+  const res = await fetch(`${SUPABASE_FUNCTION_URL}/sessions/all`, {
+    headers: supabaseHeaders,
+    signal: AbortSignal.timeout(15000),
+  });
+  assertSupabaseOk(res);
+  const data = await res.json();
+  return data.map((s: any) => ({ ...s, createdAt: new Date(s.createdAt) }));
+}
+
+export async function deleteSessionFromSupabase(sessionId: string): Promise<void> {
+  const res = await fetch(`${SUPABASE_FUNCTION_URL}/delete-session/${sessionId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+    signal: AbortSignal.timeout(15000),
+  });
+  assertSupabaseOk(res);
+}
+
+export async function cleanupDummySessions(): Promise<{ success: boolean; deletedCount: number }> {
+  const res = await fetch(`${SUPABASE_FUNCTION_URL}/cleanup-dummy-sessions`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+    signal: AbortSignal.timeout(15000),
+  });
+  assertSupabaseOk(res);
+  return res.json();
+}
+
 export interface ProcessTextResponse {
   nodes: FlowNode[];
 }
