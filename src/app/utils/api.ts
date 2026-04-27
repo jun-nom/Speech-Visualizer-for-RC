@@ -1,13 +1,5 @@
-import { projectId, publicAnonKey } from './supabase/info';
 import { FlowNode, Session } from '../App';
 import { buildSystemPrompt, TEXT_DENSITY_LIMITS } from './systemPrompt';
-
-const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a0d800ba`;
-
-const headers = {
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${publicAnonKey}`,
-};
 
 export interface ProcessTextResponse {
   nodes: FlowNode[];
@@ -18,34 +10,23 @@ export interface FeedbackResponse {
   questions: string[];
 }
 
-
-// Enhanced error handling for network requests
 async function makeRequest(url: string, options: RequestInit, retryCount = 0): Promise<Response> {
   try {
     const response = await fetch(url, {
       ...options,
-      signal: AbortSignal.timeout(30000), // 30 second timeout
+      signal: AbortSignal.timeout(30000),
     });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     return response;
   } catch (error) {
-    console.error(`Request failed (attempt ${retryCount + 1}):`, error);
-    
-    // Retry logic for network errors
     if (retryCount < 2 && (
       error instanceof TypeError && error.message.includes('Failed to fetch') ||
       error instanceof Error && error.name === 'AbortError'
     )) {
-      const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
-      console.log(`Retrying request in ${delay}ms...`);
+      const delay = Math.pow(2, retryCount) * 1000;
       await new Promise(resolve => setTimeout(resolve, delay));
       return makeRequest(url, options, retryCount + 1);
     }
-    
     throw error;
   }
 }
@@ -58,7 +39,6 @@ const NODE_QUANTITY_LIMITS: Record<string, { facts: number; insights: number }> 
 
 const CHAR_LIMITS: Record<string, number> = { high: 90, medium: 56, low: 32 };
 
-// Direct OpenAI call with an explicit API key
 async function callOpenAIDirect(messages: object[], apiKey: string, maxTokens: number, temperature: number): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -71,10 +51,6 @@ async function callOpenAIDirect(messages: object[], apiKey: string, maxTokens: n
   return result.choices[0].message.content;
 }
 
-// Unified OpenAI caller:
-//   1. ローカルAPIキーあり → 直接呼び出し
-//   2. なし → Cloudflare プロキシ経由
-//   3. Cloudflare が 404（localhost等）→ Supabase からキーを取得して直接呼び出し
 async function callOpenAI(
   messages: object[],
   localApiKey: string,
@@ -85,30 +61,17 @@ async function callOpenAI(
     return callOpenAIDirect(messages, localApiKey, maxTokens, temperature);
   }
 
-  // Cloudflare proxy を試みる
-  try {
-    const response = await fetch('/api/process-text', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, max_tokens: maxTokens, temperature }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (response.ok) {
-      const result = await response.json();
-      return result.choices[0].message.content;
-    }
-    // 404 などのエラーは Supabase フォールバックへ
-  } catch { /* ネットワークエラーも Supabase フォールバックへ */ }
-
-  // Supabase からAPIキーを取得して直接呼び出し
-  const keyRes = await fetch(`${API_BASE_URL}/openai-key`, { headers });
-  if (!keyRes.ok) throw new Error('API_KEY_UNAVAILABLE');
-  const { key } = await keyRes.json();
-  if (!key) throw new Error('API_KEY_UNAVAILABLE');
-  return callOpenAIDirect(messages, key, maxTokens, temperature);
+  const response = await fetch('/api/process-text', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, max_tokens: maxTokens, temperature }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error('API_KEY_UNAVAILABLE');
+  const result = await response.json();
+  return result.choices[0].message.content;
 }
 
-// Parse OpenAI JSON response into FlowNodes (slice is a final safety net)
 function parseTopicsToNodes(parsedContent: any, nodeQuantity: string = 'medium'): FlowNode[] {
   const limits = NODE_QUANTITY_LIMITS[nodeQuantity] ?? NODE_QUANTITY_LIMITS.medium;
   const nodes: FlowNode[] = [];
@@ -127,7 +90,6 @@ function parseTopicsToNodes(parsedContent: any, nodeQuantity: string = 'medium')
   return nodes;
 }
 
-// Consolidate items exceeding the node count limit
 async function consolidateItems(
   items: string[], maxCount: number, type: 'facts' | 'insights', apiKey: string
 ): Promise<string[]> {
@@ -148,7 +110,6 @@ async function consolidateItems(
   }
 }
 
-// Enforce node count limits by consolidating excess items
 async function enforceNodeLimits(parsedContent: any, nodeQuantity: string, apiKey: string): Promise<any> {
   const limits = NODE_QUANTITY_LIMITS[nodeQuantity] ?? NODE_QUANTITY_LIMITS.medium;
   for (const topic of parsedContent.topics) {
@@ -162,7 +123,6 @@ async function enforceNodeLimits(parsedContent: any, nodeQuantity: string, apiKe
 
 const CHAR_MIN_LIMITS: Record<string, number> = { high: 32, medium: 24, low: 2 };
 
-// Enforce text density: shorten items over the max, expand items under the min
 async function enforceTextDensity(parsedContent: any, textDensity: string, apiKey: string): Promise<any> {
   const maxLimit = CHAR_LIMITS[textDensity] ?? 90;
   const minLimit = CHAR_MIN_LIMITS[textDensity] ?? 2;
@@ -184,9 +144,7 @@ async function enforceTextDensity(parsedContent: any, textDensity: string, apiKe
     });
   });
 
-  // Shorten items exceeding the max
   if (overItems.length > 0) {
-    // テキスト量：多の場合は「80〜100文字で書き直す」、それ以外は上限以内に収める
     const shortenInstruction = textDensity === 'high'
       ? `以下の各テキスト項目を、情報密度を最大化しつつ80〜100文字になるよう書き直してください。数字・固有名詞・手法名はそのまま残し、記号（→・/・:）や略語を活用して凝縮すること。番号付きリストの形式を維持し、各項目を1行で返してください。`
       : `以下の各テキスト項目を、必ず${maxLimit}文字以内に収めて書き直してください。番号付きリストの形式を維持し、各項目を1行で返してください。`;
@@ -204,7 +162,6 @@ async function enforceTextDensity(parsedContent: any, textDensity: string, apiKe
     } catch { /* keep original on error */ }
   }
 
-  // Expand items below the min
   if (underItems.length > 0) {
     const expandInstruction = textDensity === 'high'
       ? `以下の各テキスト項目を、情報密度を最大化して書き直してください。数字・割合・固有名詞・手法名はそのまま使い、「〜について話した」「〜が重要」のような抽象表現は禁止。記号（→・/・:）や略語を積極活用し、80〜100文字で記述すること。番号付きリストの形式を維持し、各項目を1行で返してください。`
@@ -228,7 +185,6 @@ async function enforceTextDensity(parsedContent: any, textDensity: string, apiKe
   return parsedContent;
 }
 
-// Process text: call OpenAI, parse, enforce limits — all logic runs client-side
 async function processText(
   text: string,
   systemPrompt: string,
@@ -253,7 +209,6 @@ async function processText(
   return parseTopicsToNodes(parsed, nodeQuantity);
 }
 
-// Process text to speech flow nodes — all logic runs client-side
 export async function processTextToNodes(
   text: string,
   existingNodeCount: number,
@@ -273,178 +228,19 @@ export async function processTextToNodes(
   return processText(text, systemPrompt, nq, td, localApiKey);
 }
 
-// Generate feedback (comments and questions)
 export async function generateFeedback(inputs: string[]): Promise<{ comments: string[], questions: string[] }> {
-  // Cloudflare Pages Function
-  try {
-    const response = await makeRequest('/api/generate-feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inputs }),
-    });
-    const data: FeedbackResponse = await response.json();
-    return data;
-  } catch (cfError) {
-    console.warn('Cloudflare Function unavailable, falling back to Supabase:', cfError);
-  }
-
-  // 最終フォールバック: Supabase Edge Function
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/generate-feedback`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ inputs }),
-    });
-    const data: FeedbackResponse = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error generating feedback:', error);
-    throw error;
-  }
+  const response = await makeRequest('/api/generate-feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs }),
+  });
+  return response.json() as Promise<FeedbackResponse>;
 }
 
-// Save session to database
-export async function saveSession(session: Session): Promise<void> {
-  try {
-    await makeRequest(`${API_BASE_URL}/save-session`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        ...session,
-        createdAt: session.createdAt.toISOString(),
-      }),
-    });
-  } catch (error) {
-    console.error('Error saving session:', error);
-    throw error;
-  }
-}
-
-// Load session from database
-export async function loadSession(sessionId: string): Promise<Session> {
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/load-session/${sessionId}`, {
-      method: 'GET',
-      headers,
-    });
-
-    const data = await response.json();
-    return {
-      ...data,
-      createdAt: new Date(data.createdAt),
-    };
-  } catch (error) {
-    console.error('Error loading session:', error);
-    throw error;
-  }
-}
-
-// List all sessions
-export async function listSessions(): Promise<Session[]> {
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/sessions`, {
-      method: 'GET',
-      headers,
-    });
-
-    const data = await response.json();
-    return data.map((session: any) => ({
-      ...session,
-      createdAt: new Date(session.createdAt),
-    }));
-  } catch (error) {
-    console.error('Error listing sessions:', error);
-    throw error;
-  }
-}
-
-// Load all sessions from database
-export async function loadAllSessions(): Promise<Session[]> {
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/sessions/all`, {
-      method: 'GET',
-      headers,
-    });
-
-    const data = await response.json();
-    return data.map((session: any) => ({
-      ...session,
-      createdAt: new Date(session.createdAt),
-    }));
-  } catch (error) {
-    console.error('Error loading all sessions:', error);
-    throw error;
-  }
-}
-
-// Delete session from database
-export async function deleteSession(sessionId: string): Promise<void> {
-  try {
-    await makeRequest(`${API_BASE_URL}/delete-session/${sessionId}`, {
-      method: 'DELETE',
-      headers,
-    });
-  } catch (error) {
-    console.error('Error deleting session:', error);
-    throw error;
-  }
-}
-
-// Bulk delete sessions from database
-export async function deleteSessionsBulk(sessionIds: string[]): Promise<{ success: boolean; deletedCount: number }> {
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/delete-sessions-bulk`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ sessionIds }),
-    });
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error during bulk delete:', error);
-    throw error;
-  }
-}
-
-// Health check
-export async function checkHealth(): Promise<{ status: string; timestamp: string }> {
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/health`, {
-      method: 'GET',
-      headers,
-    });
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error checking health:', error);
-    throw error;
-  }
-}
-
-// Clean up dummy sessions (one-time utility function)
-export async function cleanupDummySessions(): Promise<{ success: boolean; deletedCount: number }> {
-  try {
-    const response = await makeRequest(`${API_BASE_URL}/cleanup-dummy-sessions`, {
-      method: 'DELETE',
-      headers,
-    });
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error cleaning up dummy sessions:', error);
-    throw error;
-  }
-}
-
-// Fallback functions for when OpenAI API is unavailable
 export async function generateFallbackNodes(text: string, existingTopicCount: number): Promise<FlowNode[]> {
   const mockNodes: FlowNode[] = [];
   const topicId = `topic-${Date.now()}`;
-  
-  // Always create exactly 3 nodes: title, fact, insight
-  // Only split if a single node content exceeds 80 characters
-  
-  // 1. Title node - keep simple and under 80 chars
+
   const titleContent = `トピック${existingTopicCount + 1}`;
   mockNodes.push({
     id: `node-${Date.now()}-title`,
@@ -452,76 +248,50 @@ export async function generateFallbackNodes(text: string, existingTopicCount: nu
     content: titleContent,
     topicId
   });
-  
-  // 2. Fact node - objective information with bullet points if needed
+
   const isShortText = text.length < 50;
   let factContent: string;
-  
+
   if (isShortText) {
     factContent = text;
   } else {
-    // Create realistic fact content using bullet points for multiple items
     const factItems = [
       `${text.slice(0, 30)}に関する実施内容`,
       `具体的な取り組みとその背景`
     ];
     factContent = factItems.map(item => `・${item}`).join('\n');
   }
-  
-  // Only split if the content actually exceeds 80 characters
+
   if (factContent.length > 80) {
     const chunks = splitTextIntoChunks(factContent, 80);
     chunks.forEach((chunk, index) => {
-      mockNodes.push({
-        id: `node-${Date.now()}-fact-${index}`,
-        type: 'fact',
-        content: chunk,
-        topicId
-      });
+      mockNodes.push({ id: `node-${Date.now()}-fact-${index}`, type: 'fact', content: chunk, topicId });
     });
   } else {
-    mockNodes.push({
-      id: `node-${Date.now()}-fact`,
-      type: 'fact',
-      content: factContent,
-      topicId
-    });
+    mockNodes.push({ id: `node-${Date.now()}-fact`, type: 'fact', content: factContent, topicId });
   }
-  
-  // 3. Insight node - subjective analysis with bullet points if needed
+
   let insightContent: string;
-  
+
   if (isShortText) {
     insightContent = `${text.slice(0, 25)}についての考察`;
   } else {
-    // Create realistic insight content using bullet points for multiple items
     const insightItems = [
       `${text.slice(20, 40)}から得られる洞察`,
       `今後の展望と課題`
     ];
     insightContent = insightItems.map(item => `・${item}`).join('\n');
   }
-  
-  // Only split if the content actually exceeds 80 characters
+
   if (insightContent.length > 80) {
     const chunks = splitTextIntoChunks(insightContent, 80);
     chunks.forEach((chunk, index) => {
-      mockNodes.push({
-        id: `node-${Date.now()}-insight-${index}`,
-        type: 'insight',
-        content: chunk,
-        topicId
-      });
+      mockNodes.push({ id: `node-${Date.now()}-insight-${index}`, type: 'insight', content: chunk, topicId });
     });
   } else {
-    mockNodes.push({
-      id: `node-${Date.now()}-insight`,
-      type: 'insight',
-      content: insightContent,
-      topicId
-    });
+    mockNodes.push({ id: `node-${Date.now()}-insight`, type: 'insight', content: insightContent, topicId });
   }
-  
+
   return mockNodes;
 }
 
@@ -540,27 +310,22 @@ export function generateFallbackFeedback(inputs: string[]): { comments: string[]
   };
 }
 
-// Helper function to split text into chunks of specified length
 function splitTextIntoChunks(text: string, maxLength: number): string[] {
   const chunks: string[] = [];
   let currentChunk = '';
-  
+
   const words = text.split(' ');
-  
+
   for (const word of words) {
     if ((currentChunk + ' ' + word).length <= maxLength) {
       currentChunk = currentChunk ? currentChunk + ' ' + word : word;
     } else {
-      if (currentChunk) {
-        chunks.push(currentChunk);
-      }
+      if (currentChunk) chunks.push(currentChunk);
       currentChunk = word;
     }
   }
-  
-  if (currentChunk) {
-    chunks.push(currentChunk);
-  }
-  
+
+  if (currentChunk) chunks.push(currentChunk);
+
   return chunks.length > 0 ? chunks : [text.slice(0, maxLength)];
 }
