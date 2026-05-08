@@ -13,6 +13,8 @@ interface SettingsDialogProps {
   onOpenaiApiKeyChange: (key: string) => void;
   aiModel: string;
   onAiModelChange: (model: string) => void;
+  deepgramApiKey: string;
+  onDeepgramApiKeyChange: (key: string) => void;
 }
 
 export function SettingsDialog({
@@ -20,17 +22,22 @@ export function SettingsDialog({
   onOpenaiApiKeyChange,
   aiModel,
   onAiModelChange,
+  deepgramApiKey,
+  onDeepgramApiKeyChange,
 }: SettingsDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [openaiStatus, setOpenaiStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [deepgramStatus, setDeepgramStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
 
   const [localOpenaiApiKey, setLocalOpenaiApiKey] = useState(openaiApiKey);
   const [localAiModel, setLocalAiModel] = useState(aiModel);
+  const [localDeepgramApiKey, setLocalDeepgramApiKey] = useState(deepgramApiKey);
 
   useEffect(() => {
     setLocalOpenaiApiKey(openaiApiKey);
     setLocalAiModel(aiModel);
-  }, [openaiApiKey, aiModel]);
+    setLocalDeepgramApiKey(deepgramApiKey);
+  }, [openaiApiKey, aiModel, deepgramApiKey]);
 
   const checkOpenaiApiKey = async (apiKey: string) => {
     if (!apiKey.trim()) {
@@ -62,9 +69,39 @@ export function SettingsDialog({
     }
   };
 
+  const checkDeepgramApiKey = async (apiKey: string) => {
+    if (!apiKey.trim()) {
+      setDeepgramStatus('invalid');
+      return;
+    }
+
+    setDeepgramStatus('checking');
+
+    try {
+      const response = await fetch('https://api.deepgram.com/v1/projects', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${apiKey}`,
+        },
+      });
+
+      if (response.ok) {
+        setDeepgramStatus('valid');
+        toast.success('Deepgram APIキーが有効です');
+      } else {
+        setDeepgramStatus('invalid');
+        toast.error('Deepgram APIキーが無効です');
+      }
+    } catch (error) {
+      setDeepgramStatus('invalid');
+      toast.error('Deepgram API接続エラー');
+    }
+  };
+
   const handleSave = () => {
     onOpenaiApiKeyChange(localOpenaiApiKey);
     onAiModelChange(localAiModel);
+    onDeepgramApiKeyChange(localDeepgramApiKey);
     setIsOpen(false);
     toast.success('設定を保存しました');
   };
@@ -72,6 +109,7 @@ export function SettingsDialog({
   const handleCancel = () => {
     setLocalOpenaiApiKey(openaiApiKey);
     setLocalAiModel(aiModel);
+    setLocalDeepgramApiKey(deepgramApiKey);
     setIsOpen(false);
   };
 
@@ -141,6 +179,32 @@ export function SettingsDialog({
                 <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="deepgram-api-key">Deepgram APIキー</Label>
+              <div className="flex items-center gap-2">
+                {renderStatus(deepgramStatus)}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => checkDeepgramApiKey(localDeepgramApiKey)}
+                  disabled={deepgramStatus === 'checking'}
+                >
+                  接続確認
+                </Button>
+              </div>
+            </div>
+            <Input
+              id="deepgram-api-key"
+              type="password"
+              value={localDeepgramApiKey}
+              onChange={(e) => setLocalDeepgramApiKey(e.target.value)}
+              placeholder="..."
+              className="font-mono text-sm"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t">

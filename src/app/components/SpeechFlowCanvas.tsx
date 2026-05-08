@@ -118,7 +118,7 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId }: Speec
             </div>
           </div>
         ) : (
-          <div className="speech-flow-topics-container flex flex-col flex-wrap gap-8 min-h-full max-h-[600px]">
+          <div className="speech-flow-topics-container flex flex-col flex-wrap gap-8 min-h-full">
             {topicIds.map((topicId) => (
               <TopicColumn 
                 key={topicId} 

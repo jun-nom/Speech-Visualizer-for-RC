@@ -9,6 +9,7 @@ import { toast } from 'sonner@2.0.3';
 import * as api from './utils/api';
 import { SettingsDialog } from './components/SettingsDialog';
 import { LogViewer } from './components/LogViewer';
+import { TranscriptionButton } from './components/TranscriptionButton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
 
 export interface FlowNode {
@@ -84,6 +85,13 @@ export default function App() {
     return '';
   });
 
+  const [deepgramApiKey, setDeepgramApiKey] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('speechflow-deepgram-key') || '';
+    }
+    return '';
+  });
+
   const [aiModel, setAiModel] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('speechflow-ai-model') || 'gpt-4o';
@@ -109,6 +117,15 @@ export default function App() {
   const handleOpenaiApiKeyChange = (key: string) => {
     setOpenaiApiKey(key);
     localStorage.setItem('speechflow-openai-key', key);
+  };
+
+  const handleDeepgramApiKeyChange = (key: string) => {
+    setDeepgramApiKey(key);
+    localStorage.setItem('speechflow-deepgram-key', key);
+  };
+
+  const handleTranscript = (text: string) => {
+    setCurrentInput(prev => prev ? prev + text : text);
   };
 
   const handleAiModelChange = (model: string) => {
@@ -418,7 +435,7 @@ export default function App() {
   };
 
   return (
-    <div className="speech-flow-app min-h-screen bg-gray-50">
+    <div className="speech-flow-app h-screen overflow-hidden bg-gray-50">
       {/* Header */}
       <header className="speech-flow-header bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
@@ -436,11 +453,17 @@ export default function App() {
             <Button variant="ghost" size="sm" onClick={() => setIsLogViewerOpen(true)} className="text-xs text-gray-500">
               ログ
             </Button>
+            <TranscriptionButton
+              deepgramApiKey={deepgramApiKey}
+              onTranscript={handleTranscript}
+            />
             <SettingsDialog
               openaiApiKey={openaiApiKey}
               onOpenaiApiKeyChange={handleOpenaiApiKeyChange}
               aiModel={aiModel}
               onAiModelChange={handleAiModelChange}
+              deepgramApiKey={deepgramApiKey}
+              onDeepgramApiKeyChange={handleDeepgramApiKeyChange}
             />
           </div>
         </div>
@@ -473,7 +496,7 @@ export default function App() {
         <div className="speech-flow-content flex-1 min-w-0 flex flex-col">
           {/* Speech Flow Canvas - Only show for own sessions */}
           {!isViewingOtherUserSession && (
-            <div className="speech-flow-canvas-container flex-1 bg-white border-b border-gray-200">
+            <div className="speech-flow-canvas-container flex-1 min-h-0 bg-white border-b border-gray-200">
               <SpeechFlowCanvas
                 nodes={activeSession?.nodes || []}
                 currentSession={currentViewingSession || activeSession}

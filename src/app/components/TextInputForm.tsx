@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Copy, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 export type InformationLevel = 'high' | 'medium' | 'low';
@@ -46,6 +46,8 @@ export function TextInputForm({
   isFeedbackDisabled = false,
   userRole = null
 }: TextInputFormProps) {
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (value.trim()) {
@@ -251,31 +253,40 @@ export function TextInputForm({
 
       {/* Input History */}
       {inputHistory.length > 0 && (
-        <div className="input-history space-y-2">
-          <h4 className="text-sm">入力履歴</h4>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {inputHistory.map((item, index) => (
-              <div 
-                key={index}
-                className="input-history-item flex items-start gap-2 p-3 bg-gray-50 rounded-lg text-sm"
-              >
-                <div className="flex-1 text-gray-700">
-                  <div className="text-xs text-gray-500 mb-1">
-                    {String(index + 1).padStart(2, '0')}:{String(Math.floor(Math.random() * 60)).padStart(2, '0')}
-                  </div>
-                  <div className="line-clamp-3">{item}</div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => copyToClipboard(item)}
-                  className="flex-shrink-0 p-1 h-8 w-8"
+        <div className="input-history">
+          <button
+            type="button"
+            onClick={() => setIsHistoryOpen(prev => !prev)}
+            className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900"
+          >
+            {isHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            入力履歴（{inputHistory.length}件）
+          </button>
+          {isHistoryOpen && (
+            <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
+              {inputHistory.map((item, index) => (
+                <div
+                  key={index}
+                  className="input-history-item flex items-start gap-2 p-3 bg-gray-50 rounded-lg text-sm"
                 >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+                  <div className="flex-1 text-gray-700">
+                    <div className="text-xs text-gray-500 mb-1">
+                      {String(index + 1).padStart(2, '0')}:{String(Math.floor(Math.random() * 60)).padStart(2, '0')}
+                    </div>
+                    <div className="line-clamp-3">{item}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(item)}
+                    className="flex-shrink-0 p-1 h-8 w-8"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
