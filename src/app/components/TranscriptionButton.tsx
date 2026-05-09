@@ -6,9 +6,10 @@ import { toast } from 'sonner@2.0.3';
 interface TranscriptionButtonProps {
   deepgramApiKey: string;
   onTranscript: (text: string) => void;
+  onInterimTranscript?: (text: string) => void;
 }
 
-export function TranscriptionButton({ deepgramApiKey, onTranscript }: TranscriptionButtonProps) {
+export function TranscriptionButton({ deepgramApiKey, onTranscript, onInterimTranscript }: TranscriptionButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -55,6 +56,7 @@ export function TranscriptionButton({ deepgramApiKey, onTranscript }: Transcript
         smart_format: 'true',
         interim_results: 'true',
         punctuate: 'true',
+        endpointing: '300',
       });
 
       const ws = new WebSocket(
@@ -85,14 +87,13 @@ export function TranscriptionButton({ deepgramApiKey, onTranscript }: Transcript
       ws.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data as string);
-          if (
-            data.type === 'Results' &&
-            data.is_final &&
-            data.channel?.alternatives?.[0]?.transcript
-          ) {
+          if (data.type === 'Results' && data.channel?.alternatives?.[0]?.transcript) {
             const transcript = (data.channel.alternatives[0].transcript as string).trim();
-            if (transcript) {
-              onTranscript(transcript);
+            if (data.is_final) {
+              onInterimTranscript?.('');
+              if (transcript) onTranscript(transcript);
+            } else {
+              onInterimTranscript?.(transcript);
             }
           }
         } catch {

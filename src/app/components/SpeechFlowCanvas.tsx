@@ -109,20 +109,20 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId }: Speec
         </p>
       </div>
       
-      <div className="speech-flow-canvas-area flex-1 overflow-auto p-6 flex flex-col flex-wrap">
+      <div className="speech-flow-canvas-area flex-1 overflow-auto flex flex-col">
         {nodes.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="flex items-center justify-center flex-1 text-gray-400 p-6">
             <div className="text-center">
               <div className="text-lg mb-2">スピーチフローがここに表示されます</div>
               <div className="text-sm">テキストを入力してフローを開始してください</div>
             </div>
           </div>
         ) : (
-          <div className="speech-flow-topics-container flex flex-col flex-wrap gap-8 min-h-full">
+          <div className="speech-flow-topics-container flex gap-8 p-6 w-max">
             {topicIds.map((topicId) => (
-              <TopicColumn 
-                key={topicId} 
-                nodes={groupedNodes[topicId]} 
+              <TopicColumn
+                key={topicId}
+                nodes={groupedNodes[topicId]}
                 onCopy={handleCopyToClipboard}
               />
             ))}

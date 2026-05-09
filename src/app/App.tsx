@@ -49,6 +49,7 @@ export default function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [currentInput, setCurrentInput] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [feedback, setFeedback] = useState<{ comments: string[], questions: string[] }>({ comments: [], questions: [] });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
@@ -126,7 +127,12 @@ export default function App() {
   };
 
   const handleTranscript = (text: string) => {
+    setInterimTranscript('');
     setCurrentInput(prev => prev ? prev + text : text);
+  };
+
+  const handleInterimTranscript = (text: string) => {
+    setInterimTranscript(text);
   };
 
   const handleAiModelChange = (model: string) => {
@@ -490,6 +496,7 @@ export default function App() {
             <TranscriptionButton
               deepgramApiKey={deepgramApiKey}
               onTranscript={handleTranscript}
+              onInterimTranscript={handleInterimTranscript}
             />
             <SettingsDialog
               openaiApiKey={openaiApiKey}
@@ -543,8 +550,8 @@ export default function App() {
           {/* Input Form */}
           <div className={`speech-flow-input-section bg-white p-6 ${isViewingOtherUserSession ? 'flex-1' : ''}`}>
             <TextInputForm
-              value={currentInput}
-              onChange={setCurrentInput}
+              value={currentInput + interimTranscript}
+              onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
               onSubmit={handleAddToFlow}
               onGenerateFeedback={handleGenerateFeedback}
               inputHistory={inputHistory}
