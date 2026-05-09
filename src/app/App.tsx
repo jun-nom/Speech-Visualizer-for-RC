@@ -265,6 +265,8 @@ export default function App() {
       );
       setSessions(updatedSessions);
 
+      setCurrentInput('');
+
       const uniqueTopicIds = new Set(activeSession.nodes.map(node => node.topicId));
       const existingTopicCount = uniqueTopicIds.size;
 
@@ -328,7 +330,6 @@ export default function App() {
         });
       }).catch(() => {});
 
-      setCurrentInput('');
       toast.success('スピーチフローに追加しました');
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
