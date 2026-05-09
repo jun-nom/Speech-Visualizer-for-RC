@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { FlowNode as FlowNodeType, Session } from '../App';
 import { Button } from './ui/button';
 import { Copy, User, Users } from 'lucide-react';
@@ -100,6 +100,13 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId }: Speec
 
   const topicIds = Object.keys(groupedNodes);
 
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (canvasAreaRef.current) {
+      canvasAreaRef.current.scrollTo({ left: canvasAreaRef.current.scrollWidth, behavior: 'smooth' });
+    }
+  }, [topicIds.length, nodes.length]);
+
   return (
     <div className="speech-flow-canvas h-full flex flex-col bg-gray-50">
       <div className="speech-flow-canvas-header p-4 bg-white border-b border-gray-200 flex-shrink-0">
@@ -109,21 +116,22 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId }: Speec
         </p>
       </div>
       
-      <div className="speech-flow-canvas-area flex-1 overflow-auto flex flex-col">
+      <div ref={canvasAreaRef} className="speech-flow-canvas-area flex-1 overflow-auto">
         {nodes.length === 0 ? (
-          <div className="flex items-center justify-center flex-1 text-gray-400 p-6">
+          <div className="flex items-center justify-center h-full text-gray-400 p-6">
             <div className="text-center">
               <div className="text-lg mb-2">スピーチフローがここに表示されます</div>
               <div className="text-sm">テキストを入力してフローを開始してください</div>
             </div>
           </div>
         ) : (
-          <div className="speech-flow-topics-container flex gap-8 p-6 w-max">
-            {topicIds.map((topicId) => (
+          <div className="speech-flow-topics-container flex flex-col flex-wrap gap-8 p-6 h-full content-start">
+            {topicIds.map((topicId, i) => (
               <TopicColumn
                 key={topicId}
                 nodes={groupedNodes[topicId]}
                 onCopy={handleCopyToClipboard}
+                isLast={i === topicIds.length - 1}
               />
             ))}
           </div>
@@ -136,11 +144,12 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId }: Speec
 interface TopicColumnProps {
   nodes: FlowNodeType[];
   onCopy: (content: string) => void;
+  isLast?: boolean;
 }
 
-function TopicColumn({ nodes, onCopy }: TopicColumnProps) {
+function TopicColumn({ nodes, onCopy, isLast }: TopicColumnProps) {
   return (
-    <div className="topic-column flex-shrink-0 w-[240px] flex flex-col gap-3">
+    <div className={`topic-column flex-shrink-0 flex flex-col gap-3 ${isLast ? 'w-[272px] pr-8' : 'w-[240px]'}`}>
       {nodes.map((node) => (
         <FlowNode key={node.id} node={node} onCopy={onCopy} />
       ))}

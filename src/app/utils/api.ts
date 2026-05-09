@@ -142,6 +142,8 @@ async function callOpenAI(
   return result.choices[0].message.content;
 }
 
+const trimPeriod = (text: string) => text.replace(/。$/, '');
+
 function parseTopicsToNodes(parsedContent: any, nodeQuantity: string = 'medium'): FlowNode[] {
   const limits = NODE_QUANTITY_LIMITS[nodeQuantity] ?? NODE_QUANTITY_LIMITS.medium;
   const nodes: FlowNode[] = [];
@@ -149,12 +151,12 @@ function parseTopicsToNodes(parsedContent: any, nodeQuantity: string = 'medium')
   parsedContent.topics.forEach((topic: any, topicIndex: number) => {
     if (!topic.title || !Array.isArray(topic.facts) || !Array.isArray(topic.insights)) return;
     const topicId = `topic-${counter}-${topicIndex}`;
-    nodes.push({ id: `node-${counter++}-title`, type: 'title', content: topic.title, topicId });
+    nodes.push({ id: `node-${counter++}-title`, type: 'title', content: trimPeriod(topic.title), topicId });
     topic.facts.slice(0, limits.facts).forEach((fact: string, i: number) =>
-      nodes.push({ id: `node-${counter++}-fact-${i}`, type: 'fact', content: fact, topicId })
+      nodes.push({ id: `node-${counter++}-fact-${i}`, type: 'fact', content: trimPeriod(fact), topicId })
     );
     topic.insights.slice(0, limits.insights).forEach((insight: string, i: number) =>
-      nodes.push({ id: `node-${counter++}-insight-${i}`, type: 'insight', content: insight, topicId })
+      nodes.push({ id: `node-${counter++}-insight-${i}`, type: 'insight', content: trimPeriod(insight), topicId })
     );
   });
   return nodes;
@@ -268,16 +270,114 @@ function extractJSON(content: string): any {
   return null;
 }
 
+export async function analyzeVideoFrame(base64: string): Promise<string> {
+  const apiKey = typeof window !== 'undefined'
+    ? localStorage.getItem('speechflow-openai-key') ?? ''
+    : '';
+  if (!apiKey) throw new Error('API_KEY_UNAVAILABLE');
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 250,
+      temperature: 0.1,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'List all visible text, numbers, labels, and keywords from this screenshot. Output as a plain bullet list in Japanese. No commentary.',
+          },
+          {
+            type: 'image_url',
+            image_url: { url: `data:image/jpeg;base64,${base64}`, detail: 'low' },
+          },
+        ],
+      }],
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) throw new Error(`Vision API error: ${response.status}`);
+  const data = await response.json();
+  const content = data.choices[0].message.content as string;
+  const REFUSAL_PATTERNS = ['申し訳', 'できません', 'I cannot', 'I am unable', "I'm sorry", 'sorry'];
+  if (REFUSAL_PATTERNS.some(p => content.includes(p))) throw new Error('Vision API returned refusal');
+  return content;
+}
+
+export async function correctProperNounsFromFrame(nodes: FlowNode[], frameBase64: string): Promise<FlowNode[]> {
+  const apiKey = typeof window !== 'undefined'
+    ? localStorage.getItem('speechflow-openai-key') ?? ''
+    : '';
+  if (!apiKey || nodes.length === 0) return nodes;
+
+  const numbered = nodes.map((n, i) => `${i + 1}. ${n.content}`).join('\n');
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 1000,
+      temperature: 0.1,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `画像はプレゼンやYouTube動画のスクリーンショットです。
+以下の各テキスト項目の中で、画像に表示されている固有名詞・組織名・人名・製品名と表記が異なる箇所があれば、画像の表記に合わせて修正してください。
+- 画像で確認できない固有名詞はそのまま返す
+- 内容・意味・語順は変えない（固有名詞の表記のみ修正）
+- 番号付きリスト形式（1. ～ N.）のまま全項目を返してください
+
+${numbered}`,
+          },
+          {
+            type: 'image_url',
+            image_url: { url: `data:image/jpeg;base64,${frameBase64}`, detail: 'low' },
+          },
+        ],
+      }],
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!response.ok) return nodes;
+  const data = await response.json();
+  const raw = data.choices[0].message.content as string;
+
+  // 番号付きリスト行のみ抽出（拒否メッセージなど番号なし行は無視）
+  const correctedMap: Record<number, string> = {};
+  for (const line of raw.split('\n')) {
+    const m = line.match(/^(\d+)\.\s+(.+)/);
+    if (m) correctedMap[parseInt(m[1], 10)] = m[2].trim();
+  }
+  if (Object.keys(correctedMap).length === 0) return nodes;
+
+  return nodes.map((node, i) => {
+    const corrected = correctedMap[i + 1];
+    return corrected ? { ...node, content: corrected } : node;
+  });
+}
+
 async function processText(
   text: string,
   systemPrompt: string,
   nodeQuantity: string,
   textDensity: string,
-  apiKey: string
+  apiKey: string,
+  visualContext?: string
 ): Promise<FlowNode[]> {
+  const userContent = visualContext
+    ? `[音声テキスト]\n${text}\n\n[画面の視覚情報（参考）]\n${visualContext}`
+    : `以下のテキストを分析してください：\n\n${text}`;
   const content = await callOpenAI([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `以下のテキストを分析してください：\n\n${text}` },
+    { role: 'user', content: userContent },
   ], apiKey, 3000);
 
   let parsed = extractJSON(content);
@@ -294,7 +394,8 @@ export async function processTextToNodes(
   sessionId: string,
   informationLevel?: string,
   nodeQuantity?: string,
-  textDensity?: string
+  textDensity?: string,
+  visualContext?: string
 ): Promise<FlowNode[]> {
   const level = informationLevel ?? 'high';
   const nq = nodeQuantity ?? 'medium';
@@ -304,7 +405,7 @@ export async function processTextToNodes(
     ? localStorage.getItem('speechflow-openai-key') ?? ''
     : '';
 
-  return processText(text, systemPrompt, nq, td, localApiKey);
+  return processText(text, systemPrompt, nq, td, localApiKey, visualContext);
 }
 
 export async function sanitizeProperNouns(nodes: FlowNode[], apiKey: string): Promise<FlowNode[]> {

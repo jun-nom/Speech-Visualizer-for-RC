@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SpeechFlowCanvas } from './components/SpeechFlowCanvas';
 import { TextInputForm, InformationLevel, TextDensity, NodeQuantity } from './components/TextInputForm';
 import { SessionManager } from './components/SessionManager';
@@ -58,6 +58,9 @@ export default function App() {
   const [supabaseStatus, setSupabaseStatus] = useState<api.SupabaseStatus | null>(null);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
   const [showPanels, setShowPanels] = useState(true);
+  const [pendingVisualContext, setPendingVisualContext] = useState<string | null>(null);
+  const isAnalyzingFrameRef = useRef(false);
+  const latestFrameRef = useRef<string | null>(null);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -133,6 +136,20 @@ export default function App() {
 
   const handleInterimTranscript = (text: string) => {
     setInterimTranscript(text);
+  };
+
+  const handleNewFrame = async (base64: string) => {
+    latestFrameRef.current = base64;
+    if (isAnalyzingFrameRef.current) return;
+    isAnalyzingFrameRef.current = true;
+    try {
+      const description = await api.analyzeVideoFrame(base64);
+      setPendingVisualContext(description);
+    } catch {
+      // vision analysis is best-effort; don't surface errors
+    } finally {
+      isAnalyzingFrameRef.current = false;
+    }
   };
 
   const handleAiModelChange = (model: string) => {
@@ -273,7 +290,7 @@ export default function App() {
       let newNodes: FlowNode[];
 
       try {
-        newNodes = await api.processTextToNodes(text, existingTopicCount, activeSession.id, informationLevel, nodeQuantity, textDensity);
+        newNodes = await api.processTextToNodes(text, existingTopicCount, activeSession.id, informationLevel, nodeQuantity, textDensity, pendingVisualContext ?? undefined);
 
         newNodes = newNodes.filter(node => {
           if (node.type === 'insight' && node.content === '追加の分析が必要です') return false;
@@ -306,29 +323,29 @@ export default function App() {
       const savedSession = updatedSessionsWithNodes.find(s => s.isActive);
       if (savedSession) saveToSupabase(savedSession);
 
-      // Background sanitization: runs after nodes are already displayed
-      const localApiKey = typeof window !== 'undefined'
-        ? localStorage.getItem('speechflow-openai-key') ?? ''
-        : '';
-      api.sanitizeProperNouns(newNodes, localApiKey).then(sanitizedNodes => {
-        const hasChanges = sanitizedNodes.some((node, i) => node.content !== newNodes[i]?.content);
-        if (!hasChanges) return;
-        setSessions(prev => {
-          const updated = prev.map(session =>
-            session.isActive
-              ? {
-                  ...session,
-                  nodes: session.nodes.map(node => {
-                    const sanitized = sanitizedNodes.find(s => s.id === node.id);
-                    return sanitized ?? node;
-                  }),
-                }
-              : session
-          );
-          saveSessionsToLocal(updated);
-          return updated;
-        });
-      }).catch(() => {});
+      // バックグラウンドで固有名詞を映像フレームと照合・補正
+      const frameForCorrection = latestFrameRef.current;
+      if (frameForCorrection) {
+        api.correctProperNounsFromFrame(newNodes, frameForCorrection).then(correctedNodes => {
+          const hasChanges = correctedNodes.some((n, i) => n.content !== newNodes[i]?.content);
+          if (!hasChanges) return;
+          setSessions(prev => {
+            const updated = prev.map(session =>
+              session.isActive
+                ? {
+                    ...session,
+                    nodes: session.nodes.map(node => {
+                      const corrected = correctedNodes.find(c => c.id === node.id);
+                      return corrected ?? node;
+                    }),
+                  }
+                : session
+            );
+            saveSessionsToLocal(updated);
+            return updated;
+          });
+        }).catch(() => {});
+      }
 
       toast.success('スピーチフローに追加しました');
     } catch (error) {
@@ -498,6 +515,7 @@ export default function App() {
               deepgramApiKey={deepgramApiKey}
               onTranscript={handleTranscript}
               onInterimTranscript={handleInterimTranscript}
+              onNewFrame={handleNewFrame}
             />
             <SettingsDialog
               openaiApiKey={openaiApiKey}
