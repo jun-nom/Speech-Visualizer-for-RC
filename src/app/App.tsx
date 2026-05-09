@@ -297,6 +297,30 @@ export default function App() {
       const savedSession = updatedSessionsWithNodes.find(s => s.isActive);
       if (savedSession) saveToSupabase(savedSession);
 
+      // Background sanitization: runs after nodes are already displayed
+      const localApiKey = typeof window !== 'undefined'
+        ? localStorage.getItem('speechflow-openai-key') ?? ''
+        : '';
+      api.sanitizeProperNouns(newNodes, localApiKey).then(sanitizedNodes => {
+        const hasChanges = sanitizedNodes.some((node, i) => node.content !== newNodes[i]?.content);
+        if (!hasChanges) return;
+        setSessions(prev => {
+          const updated = prev.map(session =>
+            session.isActive
+              ? {
+                  ...session,
+                  nodes: session.nodes.map(node => {
+                    const sanitized = sanitizedNodes.find(s => s.id === node.id);
+                    return sanitized ?? node;
+                  }),
+                }
+              : session
+          );
+          saveSessionsToLocal(updated);
+          return updated;
+        });
+      }).catch(() => {});
+
       setCurrentInput('');
       toast.success('スピーチフローに追加しました');
     } catch (error) {

@@ -307,6 +307,44 @@ export async function processTextToNodes(
   return processText(text, systemPrompt, nq, td, localApiKey);
 }
 
+export async function sanitizeProperNouns(nodes: FlowNode[], apiKey: string): Promise<FlowNode[]> {
+  if (nodes.length === 0) return nodes;
+
+  const numbered = nodes.map((n, i) => `${i + 1}. ${n.content}`).join('\n');
+
+  const systemPrompt = `以下の各テキスト項目に、人名・会社名・組織名・団体名などの固有名詞が含まれている場合、自然な日本語で汎称に書き直してください。
+
+書き直しルール：
+- 人名 → 「登壇者」「参加者」「研究者」「発表者」など役割で表現
+- 会社名・組織名・団体名 → 「クライアント企業」「研究機関」「対象組織」「該当チーム」など文脈に合う汎称で表現
+- ツール名・手法名・技術用語・数値・割合はそのまま使用
+- 固有名詞が含まれない場合はそのまま返す
+- 文の自然さ・意味を保ち、違和感なく仕上げること
+
+番号付きリスト形式（1. ～ N.）のまま全項目を返してください。各項目は1行で返してください。`;
+
+  try {
+    const content = await callOpenAI([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: numbered },
+    ], apiKey, 1500, 0.1);
+
+    const lines = content.split('\n')
+      .map(l => l.replace(/^\d+\.\s*/, '').trim())
+      .filter(l => l.length > 0);
+
+    if (lines.length !== nodes.length) return nodes;
+
+    return nodes.map((node, i) =>
+      lines[i] && lines[i] !== node.content
+        ? { ...node, content: lines[i] }
+        : node
+    );
+  } catch {
+    return nodes;
+  }
+}
+
 export async function generateFeedback(inputs: string[]): Promise<{ comments: string[], questions: string[] }> {
   const response = await makeRequest('/api/generate-feedback', {
     method: 'POST',
