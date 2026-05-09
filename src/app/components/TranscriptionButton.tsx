@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button } from './ui/button';
+import { Mic, StopCircle } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 interface TranscriptionButtonProps {
@@ -122,12 +123,17 @@ export function TranscriptionButton({ deepgramApiKey, onTranscript }: Transcript
 
   return (
     <Button
-      variant="ghost"
       size="sm"
       onClick={isRecording ? () => stopTranscription() : startTranscription}
-      className={`text-xs ${isRecording ? 'text-red-500' : 'text-gray-500'}`}
+      className={isRecording
+        ? 'bg-red-500 hover:bg-red-600 text-white gap-1.5'
+        : 'bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5'
+      }
     >
-      {isRecording ? '■ 停止中' : '自動書き起こし'}
+      {isRecording
+        ? <><StopCircle className="w-4 h-4" />停止</>
+        : <><Mic className="w-4 h-4" />自動書き起こし</>
+      }
     </Button>
   );
 }

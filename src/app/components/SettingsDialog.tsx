@@ -69,7 +69,7 @@ export function SettingsDialog({
     }
   };
 
-  const checkDeepgramApiKey = async (apiKey: string) => {
+  const checkDeepgramApiKey = (apiKey: string) => {
     if (!apiKey.trim()) {
       setDeepgramStatus('invalid');
       return;
@@ -77,25 +77,29 @@ export function SettingsDialog({
 
     setDeepgramStatus('checking');
 
-    try {
-      const response = await fetch('https://api.deepgram.com/v1/projects', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Token ${apiKey}`,
-        },
-      });
+    const ws = new WebSocket(
+      'wss://api.deepgram.com/v1/listen',
+      ['token', apiKey]
+    );
 
-      if (response.ok) {
-        setDeepgramStatus('valid');
-        toast.success('Deepgram APIキーが有効です');
-      } else {
-        setDeepgramStatus('invalid');
-        toast.error('Deepgram APIキーが無効です');
-      }
-    } catch (error) {
+    const timer = setTimeout(() => {
+      ws.close();
       setDeepgramStatus('invalid');
       toast.error('Deepgram API接続エラー');
-    }
+    }, 5000);
+
+    ws.onopen = () => {
+      clearTimeout(timer);
+      ws.close();
+      setDeepgramStatus('valid');
+      toast.success('Deepgram APIキーが有効です');
+    };
+
+    ws.onerror = () => {
+      clearTimeout(timer);
+      setDeepgramStatus('invalid');
+      toast.error('Deepgram APIキーが無効です');
+    };
   };
 
   const handleSave = () => {

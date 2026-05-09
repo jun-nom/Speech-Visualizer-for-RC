@@ -56,6 +56,7 @@ export default function App() {
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [supabaseStatus, setSupabaseStatus] = useState<api.SupabaseStatus | null>(null);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
+  const [showPanels, setShowPanels] = useState(true);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -461,22 +462,31 @@ export default function App() {
   return (
     <div className="speech-flow-app h-screen overflow-hidden bg-gray-50">
       {/* Header */}
-      <header className="speech-flow-header bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl">スピーチフロー可視化ツール</h1>
+      <header className="speech-flow-header bg-white border-b border-gray-200 px-6 py-0 h-[56px]">
+        <div className="flex items-center justify-between h-full gap-3 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+            <h1 className="text-xl whitespace-nowrap shrink-0">スピーチフロー可視化ツール</h1>
             {(supabaseStatus === 'quota_exceeded' || supabaseStatus === 'error') && (
-              <span className="text-xs text-amber-600">
+              <span className="text-xs text-amber-600 truncate min-w-0">
                 {supabaseStatus === 'quota_exceeded'
                   ? 'Supabaseのデータ転送量超過。データはローカルに保存されます。'
                   : 'Supabaseに接続できません。データはローカルに保存されます。'}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-3 shrink-0">
             <Button variant="ghost" size="sm" onClick={() => setIsLogViewerOpen(true)} className="text-xs text-gray-500">
               ログ
             </Button>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showPanels}
+                onChange={(e) => setShowPanels(e.target.checked)}
+                className="w-3.5 h-3.5 cursor-pointer"
+              />
+              左右パネル表示
+            </label>
             <TranscriptionButton
               deepgramApiKey={deepgramApiKey}
               onTranscript={handleTranscript}
@@ -500,9 +510,9 @@ export default function App() {
         onSupabaseStatusChange={setSupabaseStatus}
       />
 
-      <div className="speech-flow-main flex h-[calc(100vh-80px)]">
-        {/* Left Sidebar - Session Management - Fixed 280px */}
-        <div className="speech-flow-sidebar flex-shrink-0 w-[280px] bg-white border-r border-gray-200">
+      <div className="speech-flow-main flex h-[calc(100vh-56px)]">
+        {/* Left Sidebar - Session Management */}
+        <div className={`speech-flow-sidebar flex-shrink-0 ${showPanels ? 'w-[280px]' : 'w-12'} bg-white border-r border-gray-200 transition-all duration-200`}>
           <SessionManager
             sessions={sessions}
             currentUserId={currentUserId}
@@ -513,6 +523,7 @@ export default function App() {
             onBulkDeleteSessions={bulkDeleteSessions}
             isLoading={isLoadingSessions}
             isCreatingSession={isCreatingSession}
+            isCompact={!showPanels}
           />
         </div>
 
@@ -552,10 +563,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right Sidebar - Feedback - Fixed 280px */}
-        <div className="speech-flow-feedback flex-shrink-0 w-[280px] bg-white border-l border-gray-200">
-          <FeedbackGenerator feedback={feedback} />
-        </div>
+        {/* Right Sidebar - Feedback */}
+        {showPanels && (
+          <div className="speech-flow-feedback flex-shrink-0 w-[280px] bg-white border-l border-gray-200">
+            <FeedbackGenerator feedback={feedback} />
+          </div>
+        )}
       </div>
 
       <Toaster />

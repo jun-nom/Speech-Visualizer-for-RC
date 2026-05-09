@@ -17,18 +17,20 @@ interface SessionManagerProps {
   onBulkDeleteSessions?: (sessionIds: string[]) => void;
   isLoading?: boolean;
   isCreatingSession?: boolean;
+  isCompact?: boolean;
 }
 
-export function SessionManager({ 
-  sessions, 
+export function SessionManager({
+  sessions,
   currentUserId,
   currentViewingSession,
-  onCreateSession, 
-  onSwitchSession, 
+  onCreateSession,
+  onSwitchSession,
   onDeleteSession,
   onBulkDeleteSessions,
   isLoading = false,
-  isCreatingSession = false 
+  isCreatingSession = false,
+  isCompact = false,
 }: SessionManagerProps) {
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [isCleanupDialogOpen, setIsCleanupDialogOpen] = useState(false);
@@ -102,6 +104,21 @@ export function SessionManager({
     
     setIsDeletingEmpty(false);
   };
+
+  if (isCompact) {
+    return (
+      <div className="session-manager h-full flex flex-col items-center pt-3">
+        <Button
+          onClick={onCreateSession}
+          disabled={isCreatingSession || isLoading}
+          className="w-9 h-9 p-0 bg-black text-white"
+          title="新規セッション"
+        >
+          {isCreatingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
