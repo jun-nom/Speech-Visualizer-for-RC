@@ -58,6 +58,12 @@ export default function App() {
   const [supabaseStatus, setSupabaseStatus] = useState<api.SupabaseStatus | null>(null);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
   const [showPanels, setShowPanels] = useState(true);
+  const [horizontalScroll, setHorizontalScroll] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('speechflow-horizontal-scroll') === 'true';
+    }
+    return false;
+  });
   const [pendingVisualContext, setPendingVisualContext] = useState<string | null>(null);
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
@@ -505,6 +511,18 @@ export default function App() {
             <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
               <input
                 type="checkbox"
+                checked={horizontalScroll}
+                onChange={(e) => {
+                  setHorizontalScroll(e.target.checked);
+                  localStorage.setItem('speechflow-horizontal-scroll', String(e.target.checked));
+                }}
+                className="w-3.5 h-3.5 cursor-pointer"
+              />
+              横スクロール
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
+              <input
+                type="checkbox"
                 checked={showPanels}
                 onChange={(e) => setShowPanels(e.target.checked)}
                 className="w-3.5 h-3.5 cursor-pointer"
@@ -562,6 +580,7 @@ export default function App() {
                 nodes={activeSession?.nodes || []}
                 currentSession={currentViewingSession || activeSession}
                 currentUserId={currentUserId}
+                horizontalScroll={horizontalScroll}
               />
             </div>
           )}
