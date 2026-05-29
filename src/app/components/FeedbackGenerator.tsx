@@ -98,7 +98,10 @@ export function FeedbackGenerator({
     <div className="feedback-generator h-full flex flex-col">
       {/* Header */}
       <div className="feedback-header p-4 border-b border-gray-200">
-        <h3>感想・質問</h3>
+        <div className="flex items-center justify-between">
+          <h3>感想・質問</h3>
+          {hasContent && <p className="text-xs text-gray-400">クリックでコピー</p>}
+        </div>
         <div className="flex items-center gap-2 mt-2">
           <Button
             onClick={onGenerateFeedback}
@@ -126,7 +129,6 @@ export function FeedbackGenerator({
             </SelectContent>
           </Select>
         </div>
-        {hasContent && <p className="text-xs text-gray-400 mt-2">クリックでコピー</p>}
       </div>
 
       {/* Content */}
