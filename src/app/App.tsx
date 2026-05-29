@@ -59,13 +59,38 @@ function extractMiroBoardId(url: string): string | null {
   }
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0): Promise<{ success: boolean; lastShapeId?: string }> {
+async function findMiroFramePosition(boardId: string, token: string, frameTitle: string): Promise<{ x: number; y: number } | null> {
+  try {
+    const res = await fetch(
+      `https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/frames?limit=50`,
+      { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as {
+      data: Array<{
+        data?: { title?: string };
+        position: { x: number; y: number };
+        geometry?: { width: number; height: number };
+      }>;
+    };
+    const frame = data.data.find(f => (f.data?.title ?? '').includes(frameTitle));
+    if (!frame) return null;
+    const halfW = (frame.geometry?.width ?? 0) / 2;
+    const halfH = (frame.geometry?.height ?? 0) / 2;
+    return { x: frame.position.x - halfW, y: frame.position.y - halfH };
+  } catch {
+    return null;
+  }
+}
+
+async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0, searchFrameTitle?: string): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
   // Find the most recent shape that still exists on the board
   let startX = defaultX;
   let startY = defaultY;
+  let foundInHistory = false;
   for (const shapeId of shapeHistory) {
     try {
       const res = await fetch(`https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/shapes/${shapeId}`, {
@@ -75,12 +100,23 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
         const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
         startX = data.position.x + data.geometry.width / 2 + 60 + MIRO_NODE_WIDTH / 2;
         startY = data.position.y;
+        foundInHistory = true;
         break;
       }
       // 404 = deleted → try next in history
     } catch {
       // network error → try next
     }
+  }
+
+  // 履歴になければフレームタイトルで位置を検索
+  if (!foundInHistory && searchFrameTitle) {
+    const framePos = await findMiroFramePosition(boardId, token, searchFrameTitle);
+    if (framePos) {
+      startX = framePos.x;
+      startY = framePos.y;
+    }
+    // フレームが見つからなければ default (0, 0) のまま
   }
 
   const topicOrder: string[] = [];
@@ -497,7 +533,7 @@ export default function App() {
       if (venueEnabled) {
         const venueBoardId = extractMiroBoardId(venueUrl);
         if (venueBoardId) {
-          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, -25000, 30000).then(({ success, lastShapeId }) => {
+          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, 0, 0, 'セッションボード').then(({ success, lastShapeId }) => {
             if (success && lastShapeId) {
               venueShapeHistoryRef.current = [lastShapeId, ...venueShapeHistoryRef.current].slice(0, 50);
             }
