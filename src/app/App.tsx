@@ -61,8 +61,9 @@ function extractMiroBoardId(url: string): string | null {
 
 type MiroItemLike = {
   data?: { content?: string; title?: string };
-  position: { x: number; y: number };
+  position: { x: number; y: number; relativeTo?: string };
   geometry?: { width: number; height: number };
+  parent?: { id?: string };
 };
 
 async function findMiroInitialPosition(boardId: string, token: string): Promise<{ x: number; y: number }> {
@@ -123,10 +124,32 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
   }
 
   // 1. アイテムから「今ここ！」を検索
-  if (imaKokoItem) return {
-    x: imaKokoItem.position.x + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET + 310,
-    y: imaKokoItem.position.y,
-  };
+  if (imaKokoItem) {
+    let absX = imaKokoItem.position.x;
+    let absY = imaKokoItem.position.y;
+
+    // 親フレーム相対座標の場合は絶対座標に変換
+    if (imaKokoItem.position.relativeTo === 'parent_top_left' && imaKokoItem.parent?.id) {
+      try {
+        const parentRes = await fetch(
+          `https://api.miro.com/v2/boards/${enc}/frames/${imaKokoItem.parent.id}`,
+          { headers }
+        );
+        if (parentRes.ok) {
+          const p = await parentRes.json() as { position: { x: number; y: number }; geometry?: { width: number; height: number } };
+          const parentLeft = p.position.x - (p.geometry?.width ?? 0) / 2;
+          const parentTop  = p.position.y - (p.geometry?.height ?? 0) / 2;
+          absX = parentLeft + imaKokoItem.position.x;
+          absY = parentTop  + imaKokoItem.position.y;
+        }
+      } catch { /* fallthrough to relative coords */ }
+    }
+
+    return {
+      x: absX + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET + 310,
+      y: absY,
+    };
+  }
 
   // 2. 「セッションボード」フレームの左上
   const sessionFrame = frames.find(f => (f.data?.title ?? '').includes('セッションボード'));
@@ -177,8 +200,11 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
   // 履歴になければスマート初期位置を検索
   if (!foundInHistory && useSmartInitial) {
     const pos = await findMiroInitialPosition(boardId, token);
+    console.log('[Miro pos] foundInHistory:', foundInHistory, 'pos:', JSON.stringify(pos));
     startX = pos.x;
     startY = pos.y;
+  } else {
+    console.log('[Miro pos] foundInHistory:', foundInHistory, 'startX:', startX, 'startY:', startY);
   }
 
   const topicOrder: string[] = [];
