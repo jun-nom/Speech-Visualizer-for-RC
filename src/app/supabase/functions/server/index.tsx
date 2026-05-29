@@ -538,8 +538,8 @@ app.post('/make-server-a0d800ba/generate-feedback', async (c) => {
 
     const feedbackCharRange: Record<string, string> = {
       high: '30〜120文字（理想80文字程度）',
-      medium: '40〜50文字',
-      low: '10〜30文字',
+      medium: '30〜50文字',
+      low: '3〜30文字',
     };
     const charRange = feedbackCharRange[textDensity] ?? feedbackCharRange.high;
 
