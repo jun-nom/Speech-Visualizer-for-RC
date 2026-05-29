@@ -124,8 +124,8 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
 
   // 1. アイテムから「今ここ！」を検索
   if (imaKokoItem) return {
-    x: imaKokoItem.position.x + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET,
-    y: imaKokoItem.position.y + (imaKokoItem.geometry?.height ?? 0) / 2 + OFFSET,
+    x: imaKokoItem.position.x + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET + 310,
+    y: imaKokoItem.position.y - (imaKokoItem.geometry?.height ?? 0) / 2 + 80,
   };
 
   // 2. 「セッションボード」フレームの左上
