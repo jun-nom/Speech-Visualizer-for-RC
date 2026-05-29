@@ -109,12 +109,18 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
       const url = `https://api.miro.com/v2/boards/${enc}/${endpoint}?limit=50${cursor ? `&cursor=${cursor}` : ''}`;
       try {
         const res = await fetch(url, { headers });
-        if (!res.ok) break;
+        if (!res.ok) { console.log(`[Miro debug] ${endpoint} p${page} HTTP ${res.status}`); break; }
         const d = await res.json() as { data: MiroItemLike[]; cursor?: string };
         if (endpoint === 'items' && page === 0) firstPageItems = d.data ?? [];
+        // Log any item with 今 in its content
+        (d.data ?? []).forEach(i => {
+          const raw = i.data?.content ?? i.data?.title ?? '';
+          if (raw.includes('今')) console.log(`[Miro debug] HIT in ${endpoint} p${page}:`, JSON.stringify(raw.slice(0, 80)));
+        });
+        console.log(`[Miro debug] ${endpoint} p${page}: ${(d.data ?? []).length} items, cursor=${!!d.cursor}`);
         imaKokoItem = (d.data ?? []).find(matchesImaKoko);
         cursor = d.cursor;
-      } catch { break; }
+      } catch (e) { console.log(`[Miro debug] ${endpoint} p${page} error:`, e); break; }
       page++;
     } while (!imaKokoItem && cursor);
     if (imaKokoItem) break;
