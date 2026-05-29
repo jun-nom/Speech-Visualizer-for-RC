@@ -923,7 +923,7 @@ export default function App() {
                     }
                     setVenueError(data.error
                       ? `取得エラー: ${data.error}`
-                      : 'このURLはMiroではなく、ページ内にMiroのiframeも見つかりませんでした');
+                      : 'このURLはMiroでありません');
                   } catch {
                     setVenueError('ページの取得に失敗しました');
                   }
