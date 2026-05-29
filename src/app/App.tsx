@@ -31,26 +31,76 @@ export interface Session {
   draftInput?: string;
 }
 
+const MIRO_BOARD_ID = 'uXjVHMCUsVk=';
+const MIRO_NODE_WIDTH = 620;
+const MIRO_COLUMN_STEP = 700;
+const MIRO_NODE_GAP = 48;
+
+const MIRO_STYLES: Record<string, object> = {
+  title:   { fillColor: '#E2EEFD', borderColor: '#2D9BF0', borderStyle: 'normal', borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
+  fact:    { fillColor: '#FFFFFF',  borderColor: '#2D9BF0', borderStyle: 'dotted', borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
+  insight: { fillColor: '#414BB2', borderColor: '#414BB2', borderStyle: 'normal', borderWidth: '1', color: '#FFFFFF',  fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '0', textAlign: 'center', textAlignVertical: 'middle' },
+};
+
+function miroEstimateHeight(content: string, minH: number): number {
+  const LINE_HEIGHT = Math.round(37 * 1.4);
+  const charsPerLine = Math.max(1, Math.floor((MIRO_NODE_WIDTH - 50) / 37));
+  let lines = 0;
+  for (const seg of content.split('\n')) lines += Math.max(1, Math.ceil(seg.length / charsPerLine));
+  return Math.max(minH, lines * LINE_HEIGHT + 80);
+}
+
 async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise<boolean> {
-  try {
-    const res = await fetch('/api/miro-create-shapes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nodes, columnOffset }),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('[Miro] API error:', res.status, errText);
-      toast.error(`Miroエラー: ${res.status}: ${errText.slice(0, 120)}`);
-      return false;
-    }
-    toast.success('Miroに追加しました');
-    return true;
-  } catch (err) {
-    console.error('[Miro] fetch error:', err);
-    toast.error(`Miroエラー: ${String(err)}`);
-    return false;
+  const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
+  if (!token) return false;
+
+  const topicOrder: string[] = [];
+  const grouped: Record<string, FlowNode[]> = {};
+  for (const node of nodes) {
+    if (!grouped[node.topicId]) { grouped[node.topicId] = []; topicOrder.push(node.topicId); }
+    grouped[node.topicId].push(node);
   }
+  const typeOrder: Record<string, number> = { title: 0, fact: 1, insight: 2 };
+  for (const id of topicOrder) grouped[id].sort((a, b) => (typeOrder[a.type] ?? 1) - (typeOrder[b.type] ?? 1));
+
+  let successCount = 0;
+  let firstError = '';
+  for (let col = 0; col < topicOrder.length; col++) {
+    let y = 0;
+    for (const node of grouped[topicOrder[col]]) {
+      const minH = node.type === 'title' ? 160 : 200;
+      const height = miroEstimateHeight(node.content, minH);
+      const esc = node.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      const content = node.type === 'title' ? `<b>${esc}</b>` : esc;
+      try {
+        const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            data: { shape: 'round_rectangle', content },
+            style: MIRO_STYLES[node.type] ?? MIRO_STYLES.fact,
+            position: { x: (columnOffset + col) * MIRO_COLUMN_STEP, y },
+            geometry: { width: MIRO_NODE_WIDTH, height },
+          }),
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          const errText = await res.text();
+          console.error(`[Miro] ${res.status} (${node.type}):`, errText);
+          if (!firstError) firstError = `[${node.type}] ${res.status}: ${errText.slice(0, 100)}`;
+        }
+      } catch (err) {
+        console.error('[Miro] fetch error:', err);
+        if (!firstError) firstError = String(err);
+      }
+      y += height + MIRO_NODE_GAP;
+    }
+  }
+
+  if (firstError) { toast.error(`Miroエラー: ${firstError}`); return false; }
+  toast.success('Miroに追加しました');
+  return true;
 }
 
 export default function App() {

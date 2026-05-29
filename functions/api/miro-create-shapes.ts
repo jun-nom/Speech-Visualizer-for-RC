@@ -1,9 +1,7 @@
 const BOARD_ID = 'uXjVHMCUsVk=';
-const NODE_WIDTH = 480;
-const COLUMN_STEP = 560; // node width + 80px gap
-const HEIGHT_TITLE = 140;
-const HEIGHT_DEFAULT = 200;
-const NODE_GAP = 24;
+const NODE_WIDTH = 620;
+const COLUMN_STEP = 700; // node width + 80px gap
+const NODE_GAP = 48;
 
 interface FlowNode {
   id: string;
@@ -18,27 +16,42 @@ interface Env {
 
 const STYLES: Record<string, object> = {
   title: {
-    fillColor: '#DBEAFE', borderColor: '#93C5FD', borderStyle: 'normal',
-    borderWidth: '3', color: '#111827', fontFamily: 'noto sans', fontSize: '28',
+    fillColor: '#E2EEFD', borderColor: '#2D9BF0', borderStyle: 'normal',
+    borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37',
     fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle',
   },
   fact: {
-    fillColor: '#FFFFFF', borderColor: '#60A5FA', borderStyle: 'dashed',
-    borderWidth: '3', color: '#111827', fontFamily: 'noto sans', fontSize: '28',
+    fillColor: '#FFFFFF', borderColor: '#2D9BF0', borderStyle: 'dotted',
+    borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37',
     fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle',
   },
   insight: {
-    fillColor: '#3640A5', borderColor: '#3640A5', borderStyle: 'normal',
-    borderWidth: '3', color: '#FFFFFF', fontFamily: 'noto sans', fontSize: '28',
-    fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle',
+    fillColor: '#414BB2', borderColor: '#414BB2', borderStyle: 'normal',
+    borderWidth: '1', color: '#FFFFFF', fontFamily: 'noto_sans', fontSize: '37',
+    fillOpacity: '1', borderOpacity: '0', textAlign: 'center', textAlignVertical: 'middle',
   },
 };
+
+// Japanese full-width chars ≈ fontSize wide; line height ≈ fontSize * 1.4
+function estimateHeight(content: string, minHeight: number): number {
+  const FONT_SIZE = 37;
+  const CHAR_WIDTH = FONT_SIZE;
+  const LINE_HEIGHT = Math.round(FONT_SIZE * 1.4);
+  const PADDING_H = 50;
+  const PADDING_V = 80;
+  const charsPerLine = Math.max(1, Math.floor((NODE_WIDTH - PADDING_H) / CHAR_WIDTH));
+  let lines = 0;
+  for (const segment of content.split('\n')) {
+    lines += Math.max(1, Math.ceil(segment.length / charsPerLine));
+  }
+  return Math.max(minHeight, lines * LINE_HEIGHT + PADDING_V);
+}
 
 function toContent(node: FlowNode): string {
   const esc = node.content
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>');
-  return `<b>${esc}</b>`;
+  return node.type === 'title' ? `<b>${esc}</b>` : esc;
 }
 
 async function createShapes(nodes: FlowNode[], columnOffset: number, token: string) {
@@ -59,7 +72,8 @@ async function createShapes(nodes: FlowNode[], columnOffset: number, token: stri
   for (let col = 0; col < topicOrder.length; col++) {
     let y = 0;
     for (const node of grouped[topicOrder[col]]) {
-      const height = node.type === 'title' ? HEIGHT_TITLE : HEIGHT_DEFAULT;
+      const minH = node.type === 'title' ? 160 : 200;
+      const height = estimateHeight(node.content, minH);
       const res = await fetch(
         `https://api.miro.com/v2/boards/${encodeURIComponent(BOARD_ID)}/shapes`,
         {
@@ -77,7 +91,13 @@ async function createShapes(nodes: FlowNode[], columnOffset: number, token: stri
           }),
         }
       );
-      if (res.ok) successCount++; else errorCount++;
+      if (res.ok) {
+        successCount++;
+      } else {
+        const errText = await res.text();
+        console.error(`[Miro] ${res.status} (${node.type}):`, errText);
+        errorCount++;
+      }
       y += height + NODE_GAP;
     }
   }
