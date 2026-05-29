@@ -50,7 +50,16 @@ function miroEstimateHeight(content: string, minH: number): number {
   return Math.max(minH, lines * LINE_HEIGHT + 80);
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], shapeHistory: string[]): Promise<{ success: boolean; lastShapeId?: string }> {
+function extractMiroBoardId(url: string): string | null {
+  try {
+    const match = new URL(url).pathname.match(/\/board\/([^/?#]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[]): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
@@ -59,7 +68,7 @@ async function syncNodesToMiro(nodes: FlowNode[], shapeHistory: string[]): Promi
   let startY = 0;
   for (const shapeId of shapeHistory) {
     try {
-      const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes/${shapeId}`, {
+      const res = await fetch(`https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/shapes/${shapeId}`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
       if (res.ok) {
@@ -93,7 +102,7 @@ async function syncNodesToMiro(nodes: FlowNode[], shapeHistory: string[]): Promi
       const esc = node.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
       const content = node.type === 'title' ? `<b>${esc}</b>` : esc;
       try {
-        const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes`, {
+        const res = await fetch(`https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/shapes`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify({
@@ -162,6 +171,14 @@ export default function App() {
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
   const miroShapeHistoryRef = useRef<string[]>([]);
+  const venueShapeHistoryRef = useRef<string[]>([]);
+  const [venueUrl, setVenueUrl] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('miro-venue-url') || '' : ''
+  );
+  const [venueIframeSrc, setVenueIframeSrc] = useState('');
+  const [venueEnabled, setVenueEnabled] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('miro-venue-enabled') === 'true' : false
+  );
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -469,12 +486,24 @@ export default function App() {
 
       toast.success('スピーチフローに追加しました');
 
-      // Miroボードに非同期でシェイプを追加
-      syncNodesToMiro(newNodes, miroShapeHistoryRef.current).then(({ success, lastShapeId }) => {
+      // メインMiroボードに非同期でシェイプを追加
+      syncNodesToMiro(newNodes, MIRO_BOARD_ID, miroShapeHistoryRef.current).then(({ success, lastShapeId }) => {
         if (success && lastShapeId) {
           miroShapeHistoryRef.current = [lastShapeId, ...miroShapeHistoryRef.current].slice(0, 50);
         }
       });
+
+      // Miro会場ボードにも追加（有効な場合）
+      if (venueEnabled) {
+        const venueBoardId = extractMiroBoardId(venueUrl);
+        if (venueBoardId) {
+          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current).then(({ success, lastShapeId }) => {
+            if (success && lastShapeId) {
+              venueShapeHistoryRef.current = [lastShapeId, ...venueShapeHistoryRef.current].slice(0, 50);
+            }
+          });
+        }
+      }
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
@@ -704,6 +733,21 @@ export default function App() {
                 currentSession={currentViewingSession || activeSession}
                 currentUserId={currentUserId}
                 horizontalScroll={horizontalScroll}
+                venueUrl={venueUrl}
+                onVenueUrlChange={(url) => {
+                  setVenueUrl(url);
+                  localStorage.setItem('miro-venue-url', url);
+                }}
+                venueIframeSrc={venueIframeSrc}
+                onVenueGo={() => {
+                  const boardId = extractMiroBoardId(venueUrl);
+                  if (boardId) setVenueIframeSrc(`https://miro.com/app/live-embed/${boardId}/`);
+                }}
+                venueEnabled={venueEnabled}
+                onVenueEnabledChange={(enabled) => {
+                  setVenueEnabled(enabled);
+                  localStorage.setItem('miro-venue-enabled', String(enabled));
+                }}
               />
             </div>
           )}

@@ -11,10 +11,16 @@ interface SpeechFlowCanvasProps {
   currentSession?: Session | null;
   currentUserId?: string;
   horizontalScroll?: boolean;
+  venueUrl: string;
+  onVenueUrlChange: (url: string) => void;
+  venueIframeSrc: string;
+  onVenueGo: () => void;
+  venueEnabled: boolean;
+  onVenueEnabledChange: (enabled: boolean) => void;
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false }: SpeechFlowCanvasProps) {
-  const [activeTab, setActiveTab] = useState<'html' | 'miro'>('html');
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, venueEnabled, onVenueEnabledChange }: SpeechFlowCanvasProps) {
+  const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('html');
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -180,7 +186,7 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
         <div className="flex items-end gap-4 px-4 pt-4 pb-0">
           <h2 className="flex-shrink-0 pb-[6px]">スピーチフロー</h2>
           <div className="flex">
-            {(['html', 'miro'] as const).map(tab => (
+            {(['html', 'miro', 'venue'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -190,7 +196,7 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
                     : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
               >
-                {tab === 'html' ? 'HTMLオブジェクト' : 'Miroシェイプ'}
+                {tab === 'html' ? 'HTMLオブジェクト' : tab === 'miro' ? 'Miroシェイプ' : 'Miro会場'}
               </button>
             ))}
           </div>
@@ -252,7 +258,7 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
         </div>
       </div>
 
-      {/* Miro tab — always in DOM, hidden when HTML tab is active */}
+      {/* Miro tab — always in DOM, hidden when not active */}
       <iframe
         src={MIRO_EMBED_BASE}
         className={`flex-1 w-full ${activeTab !== 'miro' ? 'hidden' : ''}`}
@@ -261,6 +267,44 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
         allowFullScreen
         title="Miroボード"
       />
+
+      {/* Miro会場 tab */}
+      <div className={`flex flex-col flex-1 min-h-0 ${activeTab !== 'venue' ? 'hidden' : ''}`}>
+        <div className="px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0 flex items-center gap-2">
+          <input
+            type="text"
+            value={venueUrl}
+            onChange={e => onVenueUrlChange(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && onVenueGo()}
+            placeholder="https://miro.com/app/board/..."
+            className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 min-w-0"
+          />
+          <Button size="sm" onClick={onVenueGo} className="shrink-0">GO</Button>
+          <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap cursor-pointer">
+            <input
+              type="checkbox"
+              checked={venueEnabled}
+              onChange={e => onVenueEnabledChange(e.target.checked)}
+              className="cursor-pointer"
+            />
+            ノードを置く
+          </label>
+        </div>
+        {venueIframeSrc ? (
+          <iframe
+            src={venueIframeSrc}
+            className="flex-1 w-full"
+            style={{ border: 'none' }}
+            allow="fullscreen; clipboard-read; clipboard-write"
+            allowFullScreen
+            title="Miro会場"
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <p className="text-sm">URLを入力してGOを押してください</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
