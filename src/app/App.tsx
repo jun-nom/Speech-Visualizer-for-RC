@@ -50,9 +50,9 @@ function miroEstimateHeight(content: string, minH: number): number {
   return Math.max(minH, lines * LINE_HEIGHT + 80);
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise<boolean> {
+async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise<{ success: boolean; firstWidgetId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
-  if (!token) return false;
+  if (!token) return { success: false };
 
   const topicOrder: string[] = [];
   const grouped: Record<string, FlowNode[]> = {};
@@ -63,7 +63,7 @@ async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise
   const typeOrder: Record<string, number> = { title: 0, fact: 1, insight: 2 };
   for (const id of topicOrder) grouped[id].sort((a, b) => (typeOrder[a.type] ?? 1) - (typeOrder[b.type] ?? 1));
 
-  let successCount = 0;
+  let firstWidgetId: string | undefined;
   let firstError = '';
   for (let col = 0; col < topicOrder.length; col++) {
     let y = 0;
@@ -84,7 +84,8 @@ async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise
           }),
         });
         if (res.ok) {
-          successCount++;
+          const data = await res.json() as { id: string };
+          if (!firstWidgetId) firstWidgetId = data.id;
         } else {
           const errText = await res.text();
           console.error(`[Miro] ${res.status} (${node.type}):`, errText);
@@ -98,9 +99,9 @@ async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise
     }
   }
 
-  if (firstError) { toast.error(`Miroエラー: ${firstError}`); return false; }
+  if (firstError) { toast.error(`Miroエラー: ${firstError}`); return { success: false }; }
   toast.success('Miroに追加しました');
-  return true;
+  return { success: true, firstWidgetId };
 }
 
 export default function App() {
@@ -141,6 +142,7 @@ export default function App() {
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
   const miroColumnOffsetRef = useRef(0);
+  const [miroFocusWidgetId, setMiroFocusWidgetId] = useState<string | null>(null);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -451,8 +453,11 @@ export default function App() {
       // Miroボードに非同期でシェイプを追加
       const topicCount = new Set(newNodes.map(n => n.topicId)).size;
       const offset = miroColumnOffsetRef.current;
-      syncNodesToMiro(newNodes, offset).then(success => {
-        if (success) miroColumnOffsetRef.current += topicCount;
+      syncNodesToMiro(newNodes, offset).then(({ success, firstWidgetId }) => {
+        if (success) {
+          miroColumnOffsetRef.current += topicCount;
+          if (firstWidgetId) setMiroFocusWidgetId(firstWidgetId);
+        }
       });
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -683,6 +688,7 @@ export default function App() {
                 currentSession={currentViewingSession || activeSession}
                 currentUserId={currentUserId}
                 horizontalScroll={horizontalScroll}
+                miroFocusWidgetId={miroFocusWidgetId}
               />
             </div>
           )}

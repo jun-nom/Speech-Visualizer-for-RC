@@ -4,14 +4,25 @@ import { Button } from './ui/button';
 import { Copy, User, Users } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
+const MIRO_EMBED_BASE = 'https://miro.com/app/live-embed/uXjVHMCUsVk=/';
+
 interface SpeechFlowCanvasProps {
   nodes: FlowNodeType[];
   currentSession?: Session | null;
   currentUserId?: string;
   horizontalScroll?: boolean;
+  miroFocusWidgetId?: string | null;
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, miroFocusWidgetId }: SpeechFlowCanvasProps) {
+  const [activeTab, setActiveTab] = useState<'html' | 'miro'>('html');
+  const [iframeSrc, setIframeSrc] = useState(MIRO_EMBED_BASE);
+
+  useEffect(() => {
+    if (miroFocusWidgetId) {
+      setIframeSrc(`${MIRO_EMBED_BASE}?moveToWidget=${miroFocusWidgetId}&cot=1`);
+    }
+  }, [miroFocusWidgetId]);
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -172,59 +183,95 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
 
   return (
     <div className="speech-flow-canvas h-full flex flex-col bg-gray-50">
-      <div className="speech-flow-canvas-header p-4 bg-white border-b border-gray-200 flex-shrink-0">
-        <h2>スピーチフロー</h2>
-        <p className="text-sm text-gray-600">
-          トピック別ノードが表示されます（水色：タイトル、点線白：ファクト、濃青：インサイト）・クリックまたはドラッグ範囲選択でコピー
-        </p>
+      {/* Header */}
+      <div className="speech-flow-canvas-header bg-white border-b border-gray-200 flex-shrink-0">
+        <div className="px-4 pt-4 pb-0">
+          <h2>スピーチフロー</h2>
+        </div>
+        {/* Tabs */}
+        <div className="flex px-4 mt-2">
+          {(['html', 'miro'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-1.5 text-xs border-b-2 transition-colors ${
+                activeTab === tab
+                  ? 'border-blue-500 text-blue-600 font-medium'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {tab === 'html' ? 'HTMLオブジェクト' : 'Miroシェイプ'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Drag selection overlay */}
-      {dragRect && (
-        <div
-          style={{
-            position: 'fixed',
-            left: Math.min(dragRect.x1, dragRect.x2),
-            top: Math.min(dragRect.y1, dragRect.y2),
-            width: Math.abs(dragRect.x2 - dragRect.x1),
-            height: Math.abs(dragRect.y2 - dragRect.y1),
-            border: '1.5px solid rgba(54, 64, 165, 0.7)',
-            backgroundColor: 'rgba(54, 64, 165, 0.08)',
-            pointerEvents: 'none',
-            zIndex: 50,
-          }}
-        />
+      {activeTab === 'html' && (
+        <>
+          <div className="px-4 py-2 bg-white border-b border-gray-100 flex-shrink-0">
+            <p className="text-sm text-gray-600">
+              トピック別ノードが表示されます（水色：タイトル、点線白：ファクト、濃青：インサイト）・クリックまたはドラッグ範囲選択でコピー
+            </p>
+          </div>
+
+          {dragRect && (
+            <div
+              style={{
+                position: 'fixed',
+                left: Math.min(dragRect.x1, dragRect.x2),
+                top: Math.min(dragRect.y1, dragRect.y2),
+                width: Math.abs(dragRect.x2 - dragRect.x1),
+                height: Math.abs(dragRect.y2 - dragRect.y1),
+                border: '1.5px solid rgba(54, 64, 165, 0.7)',
+                backgroundColor: 'rgba(54, 64, 165, 0.08)',
+                pointerEvents: 'none',
+                zIndex: 50,
+              }}
+            />
+          )}
+
+          <div
+            ref={canvasAreaRef}
+            className="speech-flow-canvas-area flex-1 overflow-auto select-none"
+            onMouseDown={handleCanvasMouseDown}
+          >
+            {nodes.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-400 p-6">
+                <div className="text-center">
+                  <div className="text-lg mb-2">スピーチフローがここに表示されます</div>
+                  <div className="text-sm">テキストを入力してフローを開始してください</div>
+                </div>
+              </div>
+            ) : (
+              <div className={horizontalScroll
+                ? "speech-flow-topics-container flex flex-col flex-wrap gap-8 p-6 h-full content-start"
+                : "speech-flow-topics-container flex flex-row flex-wrap gap-8 p-6 content-start"
+              }>
+                {topicIds.map((topicId, i) => (
+                  <TopicColumn
+                    key={topicId}
+                    nodes={groupedNodes[topicId]}
+                    onCopy={copyToClipboard}
+                    wasDragging={wasDraggingRef}
+                    isLast={horizontalScroll && i === topicIds.length - 1}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
-      <div
-        ref={canvasAreaRef}
-        className="speech-flow-canvas-area flex-1 overflow-auto select-none"
-        onMouseDown={handleCanvasMouseDown}
-      >
-        {nodes.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400 p-6">
-            <div className="text-center">
-              <div className="text-lg mb-2">スピーチフローがここに表示されます</div>
-              <div className="text-sm">テキストを入力してフローを開始してください</div>
-            </div>
-          </div>
-        ) : (
-          <div className={horizontalScroll
-            ? "speech-flow-topics-container flex flex-col flex-wrap gap-8 p-6 h-full content-start"
-            : "speech-flow-topics-container flex flex-row flex-wrap gap-8 p-6 content-start"
-          }>
-            {topicIds.map((topicId, i) => (
-              <TopicColumn
-                key={topicId}
-                nodes={groupedNodes[topicId]}
-                onCopy={copyToClipboard}
-                wasDragging={wasDraggingRef}
-                isLast={horizontalScroll && i === topicIds.length - 1}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {activeTab === 'miro' && (
+        <iframe
+          src={iframeSrc}
+          className="flex-1 w-full"
+          style={{ border: 'none' }}
+          allow="fullscreen; clipboard-read; clipboard-write"
+          allowFullScreen
+          title="Miroボード"
+        />
+      )}
     </div>
   );
 }
