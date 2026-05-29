@@ -59,13 +59,13 @@ function extractMiroBoardId(url: string): string | null {
   }
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[]): Promise<{ success: boolean; lastShapeId?: string }> {
+async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
   // Find the most recent shape that still exists on the board
-  let startX = -25000;
-  let startY = -25000;
+  let startX = defaultX;
+  let startY = defaultY;
   for (const shapeId of shapeHistory) {
     try {
       const res = await fetch(`https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/shapes/${shapeId}`, {
@@ -497,7 +497,7 @@ export default function App() {
       if (venueEnabled) {
         const venueBoardId = extractMiroBoardId(venueUrl);
         if (venueBoardId) {
-          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current).then(({ success, lastShapeId }) => {
+          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, -25000, 30000).then(({ success, lastShapeId }) => {
             if (success && lastShapeId) {
               venueShapeHistoryRef.current = [lastShapeId, ...venueShapeHistoryRef.current].slice(0, 50);
             }
