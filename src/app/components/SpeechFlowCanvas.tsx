@@ -177,24 +177,23 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
     <div className="speech-flow-canvas h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="speech-flow-canvas-header bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="px-4 pt-4 pb-0">
-          <h2>スピーチフロー</h2>
-        </div>
-        {/* Tabs */}
-        <div className="flex px-4 mt-2">
-          {(['html', 'miro'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-1.5 text-xs border-b-2 transition-colors ${
-                activeTab === tab
-                  ? 'border-blue-500 text-blue-600 font-medium'
-                  : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              {tab === 'html' ? 'HTMLオブジェクト' : 'Miroシェイプ'}
-            </button>
-          ))}
+        <div className="flex items-end gap-4 px-4 pt-4 pb-0">
+          <h2 className="flex-shrink-0 pb-[6px]">スピーチフロー</h2>
+          <div className="flex">
+            {(['html', 'miro'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 text-xs border-b-2 transition-colors ${
+                  activeTab === tab
+                    ? 'border-blue-500 text-blue-600 font-medium'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {tab === 'html' ? 'HTMLオブジェクト' : 'Miroシェイプ'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
