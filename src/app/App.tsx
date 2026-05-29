@@ -589,7 +589,7 @@ export default function App() {
         if (success && lastShapeId) {
           miroShapeHistoryRef.current = [lastShapeId, ...miroShapeHistoryRef.current].slice(0, 50);
         }
-      });
+      }).catch(e => toast.error('Miroエラー(main): ' + String(e)));
 
       // Miro会場ボードにも追加（有効な場合）
       if (venueEnabled) {
@@ -599,7 +599,7 @@ export default function App() {
             if (success && lastShapeId) {
               venueShapeHistoryRef.current = [lastShapeId, ...venueShapeHistoryRef.current].slice(0, 50);
             }
-          });
+          }).catch(e => toast.error('Miroエラー(venue): ' + String(e)));
         }
       }
     } catch (error) {
