@@ -69,9 +69,11 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
   const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
   const enc = encodeURIComponent(boardId);
 
-  // Miro inserts zero-width chars (U+200B etc.) between CJK characters
+  // Miro stores ！as &#xff01; and inserts U+200B between CJK chars
   const stripHtml = (s: string) => s
     .replace(/<[^>]+>/g, '')
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#([0-9]+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
     .replace(/[​‌‍﻿­]/g, '');
   const leftEdge = (item: MiroItemLike) => item.position.x - (item.geometry?.width ?? 0) / 2;
   const topEdge  = (item: MiroItemLike) => item.position.y - (item.geometry?.height ?? 0) / 2;
@@ -109,18 +111,12 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
       const url = `https://api.miro.com/v2/boards/${enc}/${endpoint}?limit=50${cursor ? `&cursor=${cursor}` : ''}`;
       try {
         const res = await fetch(url, { headers });
-        if (!res.ok) { console.log(`[Miro debug] ${endpoint} p${page} HTTP ${res.status}`); break; }
+        if (!res.ok) break;
         const d = await res.json() as { data: MiroItemLike[]; cursor?: string };
         if (endpoint === 'items' && page === 0) firstPageItems = d.data ?? [];
-        // Log any item with 今 in its content
-        (d.data ?? []).forEach(i => {
-          const raw = i.data?.content ?? i.data?.title ?? '';
-          if (raw.includes('今')) console.log(`[Miro debug] HIT in ${endpoint} p${page}:`, JSON.stringify(raw.slice(0, 80)));
-        });
-        console.log(`[Miro debug] ${endpoint} p${page}: ${(d.data ?? []).length} items, cursor=${!!d.cursor}`);
         imaKokoItem = (d.data ?? []).find(matchesImaKoko);
         cursor = d.cursor;
-      } catch (e) { console.log(`[Miro debug] ${endpoint} p${page} error:`, e); break; }
+      } catch { break; }
       page++;
     } while (!imaKokoItem && cursor);
     if (imaKokoItem) break;
