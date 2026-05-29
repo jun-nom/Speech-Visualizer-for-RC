@@ -185,9 +185,23 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
       if (res.ok) {
-        const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
-        startX = data.position.x + data.geometry.width / 2 + 60 + MIRO_NODE_WIDTH / 2;
-        startY = data.position.y;
+        const data = await res.json() as MiroItemLike;
+        let absX = data.position.x;
+        let absY = data.position.y;
+        if (data.position.relativeTo === 'parent_top_left' && data.parent?.id) {
+          try {
+            const pr = await fetch(`https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/frames/${data.parent.id}`, {
+              headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+            });
+            if (pr.ok) {
+              const p = await pr.json() as MiroItemLike;
+              absX = p.position.x - (p.geometry?.width ?? 0) / 2 + data.position.x;
+              absY = p.position.y - (p.geometry?.height ?? 0) / 2 + data.position.y;
+            }
+          } catch { /* fallthrough */ }
+        }
+        startX = absX + (data.geometry?.width ?? 0) / 2 + 60 + MIRO_NODE_WIDTH / 2;
+        startY = absY;
         foundInHistory = true;
         break;
       }
