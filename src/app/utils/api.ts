@@ -463,11 +463,11 @@ export async function sanitizeProperNouns(nodes: FlowNode[], apiKey: string): Pr
   }
 }
 
-export async function generateFeedback(inputs: string[]): Promise<{ comments: string[], questions: string[] }> {
+export async function generateFeedback(inputs: string[], textDensity?: string): Promise<{ comments: string[], questions: string[] }> {
   const response = await makeRequest('/api/generate-feedback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inputs }),
+    body: JSON.stringify({ inputs, textDensity }),
   });
   return response.json() as Promise<FeedbackResponse>;
 }

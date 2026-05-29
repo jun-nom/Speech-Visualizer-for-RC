@@ -393,7 +393,7 @@ export default function App() {
       let generatedFeedback: { comments: string[], questions: string[] };
 
       try {
-        generatedFeedback = await api.generateFeedback(inputHistory);
+        generatedFeedback = await api.generateFeedback(inputHistory, textDensity);
       } catch (apiError) {
         const errorMessage = (apiError instanceof Error ? apiError.message : 'Unknown error').toLowerCase();
         generatedFeedback = api.generateFallbackFeedback(inputHistory);
