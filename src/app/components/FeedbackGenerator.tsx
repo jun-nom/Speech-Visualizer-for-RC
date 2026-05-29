@@ -116,7 +116,7 @@ export function FeedbackGenerator({
             )}
           </Button>
           <Select value={feedbackTextDensity} onValueChange={onFeedbackTextDensityChange}>
-            <SelectTrigger className="w-[100px] h-8 text-xs">
+            <SelectTrigger className="w-[120px] h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
