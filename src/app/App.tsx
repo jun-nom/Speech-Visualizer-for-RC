@@ -54,9 +54,9 @@ async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): P
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
-  // Determine starting position: 30px to the right of last placed shape
+  // Determine starting position: 30px to the right of last placed shape, same Y
   let startX = 0;
-  const startY = 0;
+  let startY = 0;
   if (lastShapeId) {
     try {
       const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes/${lastShapeId}`, {
@@ -64,8 +64,8 @@ async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): P
       });
       if (res.ok) {
         const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
-        // startX = center of new shape = right edge of last shape + 30px gap + half width of new shape
         startX = data.position.x + data.geometry.width / 2 + 30 + MIRO_NODE_WIDTH / 2;
+        startY = data.position.y;
       }
     } catch {
       // fall through to default (0, 0)
