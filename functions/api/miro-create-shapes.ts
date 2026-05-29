@@ -26,7 +26,7 @@ const STYLES: Record<string, object> = {
     fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle',
   },
   insight: {
-    fillColor: '#414BB2', borderColor: '#414BB2', borderStyle: 'normal',
+    fillColor: '#0E46AC', borderColor: '#0E46AC', borderStyle: 'normal',
     borderWidth: '1', color: '#FFFFFF', fontFamily: 'noto_sans', fontSize: '37',
     fillOpacity: '1', borderOpacity: '0', textAlign: 'center', textAlignVertical: 'middle',
   },

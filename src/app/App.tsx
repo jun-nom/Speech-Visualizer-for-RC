@@ -39,7 +39,7 @@ const MIRO_NODE_GAP = 48;
 const MIRO_STYLES: Record<string, object> = {
   title:   { fillColor: '#E2EEFD', borderColor: '#2D9BF0', borderStyle: 'normal', borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
   fact:    { fillColor: '#FFFFFF',  borderColor: '#2D9BF0', borderStyle: 'dotted', borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
-  insight: { fillColor: '#414BB2', borderColor: '#414BB2', borderStyle: 'normal', borderWidth: '1', color: '#FFFFFF',  fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '0', textAlign: 'center', textAlignVertical: 'middle' },
+  insight: { fillColor: '#0E46AC', borderColor: '#0E46AC', borderStyle: 'normal', borderWidth: '1', color: '#FFFFFF',  fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '0', textAlign: 'center', textAlignVertical: 'middle' },
 };
 
 function miroEstimateHeight(content: string, minH: number): number {
