@@ -69,36 +69,55 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
   const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
   const enc = encodeURIComponent(boardId);
 
-  const [itemsRes, framesRes] = await Promise.allSettled([
-    fetch(`https://api.miro.com/v2/boards/${enc}/items?limit=50`, { headers }),
-    fetch(`https://api.miro.com/v2/boards/${enc}/frames?limit=50`, { headers }),
-  ]);
-
-  let items: MiroItemLike[] = [];
-  let frames: MiroItemLike[] = [];
-  if (itemsRes.status === 'fulfilled' && itemsRes.value.ok) {
-    const d = await itemsRes.value.json() as { data: MiroItemLike[] };
-    items = d.data ?? [];
-  }
-  if (framesRes.status === 'fulfilled' && framesRes.value.ok) {
-    const d = await framesRes.value.json() as { data: MiroItemLike[] };
-    frames = d.data ?? [];
-  }
-
   const stripHtml = (s: string) => s.replace(/<[^>]+>/g, '');
   const leftEdge = (item: MiroItemLike) => item.position.x - (item.geometry?.width ?? 0) / 2;
   const topEdge  = (item: MiroItemLike) => item.position.y - (item.geometry?.height ?? 0) / 2;
   const OFFSET = 80;
 
-  // 1. 「今ここ！」シェイプまたはフレームの右下
   const matchesImaKoko = (item: MiroItemLike) => {
     const text = stripHtml(item.data?.content ?? item.data?.title ?? '');
     return text.includes('今ここ！') || text.includes('今ここ!');
   };
-  const imaKoko = items.find(matchesImaKoko) ?? frames.find(matchesImaKoko);
-  if (imaKoko) return {
-    x: imaKoko.position.x + (imaKoko.geometry?.width ?? 0) / 2 + OFFSET,
-    y: imaKoko.position.y + (imaKoko.geometry?.height ?? 0) / 2 + OFFSET,
+
+  // フレームを取得（最大50件、通常十分）
+  let frames: MiroItemLike[] = [];
+  try {
+    const res = await fetch(`https://api.miro.com/v2/boards/${enc}/frames?limit=50`, { headers });
+    if (res.ok) {
+      const d = await res.json() as { data: MiroItemLike[] };
+      frames = d.data ?? [];
+    }
+  } catch { /* ignore */ }
+
+  // 1. フレームから「今ここ！」を検索
+  const imaKokoFrame = frames.find(matchesImaKoko);
+  if (imaKokoFrame) return {
+    x: imaKokoFrame.position.x + (imaKokoFrame.geometry?.width ?? 0) / 2 + OFFSET,
+    y: imaKokoFrame.position.y + (imaKokoFrame.geometry?.height ?? 0) / 2 + OFFSET,
+  };
+
+  // アイテムをページネーションしながら「今ここ！」を検索（最大5ページ）
+  let firstPageItems: MiroItemLike[] = [];
+  let imaKokoItem: MiroItemLike | undefined;
+  let cursor: string | undefined;
+  let page = 0;
+  do {
+    const url = `https://api.miro.com/v2/boards/${enc}/items?limit=50${cursor ? `&cursor=${cursor}` : ''}`;
+    try {
+      const res = await fetch(url, { headers });
+      if (!res.ok) break;
+      const d = await res.json() as { data: MiroItemLike[]; cursor?: string };
+      if (page === 0) firstPageItems = d.data ?? [];
+      imaKokoItem = (d.data ?? []).find(matchesImaKoko);
+      cursor = d.cursor;
+    } catch { break; }
+    page++;
+  } while (!imaKokoItem && cursor && page < 5);
+
+  // 1. アイテムから「今ここ！」を検索
+  if (imaKokoItem) return {
+    x: imaKokoItem.position.x + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET,
+    y: imaKokoItem.position.y + (imaKokoItem.geometry?.height ?? 0) / 2 + OFFSET,
   };
 
   // 2. 「セッションボード」フレームの左上
@@ -111,9 +130,9 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
     return { x: leftEdge(leftmost) + OFFSET, y: topEdge(leftmost) + OFFSET };
   }
 
-  // 4. 一番左にある要素の左上
-  if (items.length > 0) {
-    const leftmost = items.reduce((a, b) => leftEdge(a) <= leftEdge(b) ? a : b);
+  // 4. 一番左にある要素の左上（1ページ目のみ）
+  if (firstPageItems.length > 0) {
+    const leftmost = firstPageItems.reduce((a, b) => leftEdge(a) <= leftEdge(b) ? a : b);
     return { x: leftEdge(leftmost) + OFFSET, y: topEdge(leftmost) + OFFSET };
   }
 
