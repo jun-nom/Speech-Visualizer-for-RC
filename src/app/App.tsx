@@ -50,9 +50,29 @@ function miroEstimateHeight(content: string, minH: number): number {
   return Math.max(minH, lines * LINE_HEIGHT + 80);
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise<{ success: boolean; firstWidgetId?: string }> {
+const MIRO_BATCH_GAP = 80; // gap between successive batches
+
+async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
+
+  // Determine starting position: bottom-right of last placed shape
+  let startX = 0;
+  let startY = 0;
+  if (lastShapeId) {
+    try {
+      const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes/${lastShapeId}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
+        startX = data.position.x + data.geometry.width / 2 + MIRO_BATCH_GAP;
+        startY = data.position.y + data.geometry.height / 2 + MIRO_BATCH_GAP;
+      }
+    } catch {
+      // fall through to default (0, 0)
+    }
+  }
 
   const topicOrder: string[] = [];
   const grouped: Record<string, FlowNode[]> = {};
@@ -63,10 +83,10 @@ async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise
   const typeOrder: Record<string, number> = { title: 0, fact: 1, insight: 2 };
   for (const id of topicOrder) grouped[id].sort((a, b) => (typeOrder[a.type] ?? 1) - (typeOrder[b.type] ?? 1));
 
-  let firstWidgetId: string | undefined;
+  let newLastShapeId: string | undefined;
   let firstError = '';
   for (let col = 0; col < topicOrder.length; col++) {
-    let y = 0;
+    let y = startY;
     for (const node of grouped[topicOrder[col]]) {
       const minH = node.type === 'title' ? 160 : 200;
       const height = miroEstimateHeight(node.content, minH);
@@ -79,13 +99,13 @@ async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise
           body: JSON.stringify({
             data: { shape: 'round_rectangle', content },
             style: MIRO_STYLES[node.type] ?? MIRO_STYLES.fact,
-            position: { x: (columnOffset + col) * MIRO_COLUMN_STEP, y },
+            position: { x: startX + col * MIRO_COLUMN_STEP, y },
             geometry: { width: MIRO_NODE_WIDTH, height },
           }),
         });
         if (res.ok) {
           const data = await res.json() as { id: string };
-          if (!firstWidgetId) firstWidgetId = data.id;
+          newLastShapeId = data.id;
         } else {
           const errText = await res.text();
           console.error(`[Miro] ${res.status} (${node.type}):`, errText);
@@ -101,7 +121,7 @@ async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise
 
   if (firstError) { toast.error(`Miroエラー: ${firstError}`); return { success: false }; }
   toast.success('Miroに追加しました');
-  return { success: true, firstWidgetId };
+  return { success: true, lastShapeId: newLastShapeId };
 }
 
 export default function App() {
@@ -141,7 +161,7 @@ export default function App() {
   const [pendingVisualContext, setPendingVisualContext] = useState<string | null>(null);
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
-  const miroColumnOffsetRef = useRef(0);
+  const lastMiroShapeIdRef = useRef<string | null>(null);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -450,10 +470,8 @@ export default function App() {
       toast.success('スピーチフローに追加しました');
 
       // Miroボードに非同期でシェイプを追加
-      const topicCount = new Set(newNodes.map(n => n.topicId)).size;
-      const offset = miroColumnOffsetRef.current;
-      syncNodesToMiro(newNodes, offset).then(({ success }) => {
-        if (success) miroColumnOffsetRef.current += topicCount;
+      syncNodesToMiro(newNodes, lastMiroShapeIdRef.current).then(({ success, lastShapeId }) => {
+        if (success && lastShapeId) lastMiroShapeIdRef.current = lastShapeId;
       });
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
