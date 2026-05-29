@@ -64,7 +64,7 @@ async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): P
       });
       if (res.ok) {
         const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
-        startX = data.position.x + data.geometry.width / 2 + 30 + MIRO_NODE_WIDTH / 2;
+        startX = data.position.x + data.geometry.width / 2 + 60 + MIRO_NODE_WIDTH / 2;
         startY = data.position.y;
       }
     } catch {
