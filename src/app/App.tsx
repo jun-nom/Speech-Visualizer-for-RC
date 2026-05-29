@@ -315,6 +315,7 @@ export default function App() {
   const [venueEnabled, setVenueEnabled] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('miro-venue-enabled') === 'true' : false
   );
+  const [venueError, setVenueError] = useState('');
   const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('html');
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
@@ -889,9 +890,11 @@ export default function App() {
                 onVenueUrlChange={(url) => {
                   setVenueUrl(url);
                   localStorage.setItem('miro-venue-url', url);
+                  setVenueError('');
                 }}
                 venueIframeSrc={venueIframeSrc}
                 onVenueGo={async () => {
+                  setVenueError('');
                   const boardId = extractMiroBoardId(venueUrl);
                   if (boardId) {
                     setVenueIframeSrc(`https://miro.com/app/live-embed/${boardId}/`);
@@ -905,7 +908,7 @@ export default function App() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ url: venueUrl }),
                     });
-                    if (!res.ok) { toast.error('ページの取得に失敗しました'); return; }
+                    if (!res.ok) { setVenueError('ページの取得に失敗しました'); return; }
                     const data = await res.json() as { miroUrls?: string[]; error?: string };
                     if (data.miroUrls && data.miroUrls.length > 0) {
                       const foundUrl = data.miroUrls[0];
@@ -918,9 +921,11 @@ export default function App() {
                         return;
                       }
                     }
-                    toast.error(data.error ?? 'ページのHTMLにMiroのiframeが見つかりませんでした');
+                    setVenueError(data.error
+                      ? `取得エラー: ${data.error}`
+                      : 'このURLはMiroではなく、ページ内にMiroのiframeも見つかりませんでした');
                   } catch {
-                    toast.error('ページの取得に失敗しました');
+                    setVenueError('ページの取得に失敗しました');
                   }
                 }}
                 venueEnabled={venueEnabled}
@@ -928,6 +933,7 @@ export default function App() {
                   setVenueEnabled(enabled);
                   localStorage.setItem('miro-venue-enabled', String(enabled));
                 }}
+                venueError={venueError}
                 activeTab={activeTab}
               />
             </div>

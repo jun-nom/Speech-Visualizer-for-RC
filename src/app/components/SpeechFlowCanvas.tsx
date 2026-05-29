@@ -17,10 +17,11 @@ interface SpeechFlowCanvasProps {
   onVenueGo: () => void;
   venueEnabled: boolean;
   onVenueEnabledChange: (enabled: boolean) => void;
+  venueError?: string;
   activeTab: 'html' | 'miro' | 'venue';
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, venueEnabled, onVenueEnabledChange, activeTab }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, venueEnabled, onVenueEnabledChange, venueError, activeTab }: SpeechFlowCanvasProps) {
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -278,8 +279,12 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
             title="Miro会場"
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            <p className="text-sm">URLを入力してGOを押してください</p>
+          <div className="flex-1 flex items-center justify-center p-6">
+            {venueError ? (
+              <p className="text-sm text-red-500 text-center">{venueError}</p>
+            ) : (
+              <p className="text-sm text-gray-400">URLを入力してGOを押してください</p>
+            )}
           </div>
         )}
       </div>
