@@ -90,11 +90,12 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
   const topEdge  = (item: MiroItemLike) => item.position.y - (item.geometry?.height ?? 0) / 2;
   const OFFSET = 80;
 
-  // 1. 「今ここ！」シェイプの右下
-  const imaKoko = items.find(item => {
+  // 1. 「今ここ！」シェイプまたはフレームの右下
+  const matchesImaKoko = (item: MiroItemLike) => {
     const text = stripHtml(item.data?.content ?? item.data?.title ?? '');
     return text.includes('今ここ！') || text.includes('今ここ!');
-  });
+  };
+  const imaKoko = items.find(matchesImaKoko) ?? frames.find(matchesImaKoko);
   if (imaKoko) return {
     x: imaKoko.position.x + (imaKoko.geometry?.width ?? 0) / 2 + OFFSET,
     y: imaKoko.position.y + (imaKoko.geometry?.height ?? 0) / 2 + OFFSET,
