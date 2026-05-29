@@ -31,6 +31,69 @@ export interface Session {
   draftInput?: string;
 }
 
+const MIRO_BOARD_ID = 'uXjVHMCUsVk=';
+const MIRO_STYLES: Record<string, object> = {
+  title:   { fillColor: '#DBEAFE', borderColor: '#93C5FD', borderStyle: 'normal', borderWidth: '3', color: '#111827', fontFamily: 'noto_sans', fontSize: '28', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
+  fact:    { fillColor: '#FFFFFF',  borderColor: '#60A5FA', borderStyle: 'dashed', borderWidth: '3', color: '#111827', fontFamily: 'noto_sans', fontSize: '28', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
+  insight: { fillColor: '#3640A5', borderColor: '#3640A5', borderStyle: 'normal', borderWidth: '3', color: '#FFFFFF',  fontFamily: 'noto_sans', fontSize: '28', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
+};
+
+async function syncNodesToMiro(nodes: FlowNode[], columnOffset: number): Promise<boolean> {
+  const token = (import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined);
+  if (!token) return false;
+
+  const topicOrder: string[] = [];
+  const grouped: Record<string, FlowNode[]> = {};
+  for (const node of nodes) {
+    if (!grouped[node.topicId]) { grouped[node.topicId] = []; topicOrder.push(node.topicId); }
+    grouped[node.topicId].push(node);
+  }
+  const typeOrder: Record<string, number> = { title: 0, fact: 1, insight: 2 };
+  for (const id of topicOrder) {
+    grouped[id].sort((a, b) => (typeOrder[a.type] ?? 1) - (typeOrder[b.type] ?? 1));
+  }
+
+  let successCount = 0;
+  let firstError = '';
+  for (let col = 0; col < topicOrder.length; col++) {
+    let y = 0;
+    for (const node of grouped[topicOrder[col]]) {
+      const height = node.type === 'title' ? 160 : 240;
+      const esc = node.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      try {
+        const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            data: { shape: 'round_rectangle', content: `<b>${esc}</b>` },
+            style: MIRO_STYLES[node.type] ?? MIRO_STYLES.fact,
+            position: { x: (columnOffset + col) * 600, y },
+            geometry: { width: 520, height },
+          }),
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          const errText = await res.text();
+          console.error(`[Miro] ${res.status} (${node.type}):`, errText);
+          if (!firstError) firstError = `[${node.type}] ${res.status}: ${errText.slice(0, 120)}`;
+        }
+      } catch (err) {
+        console.error('[Miro] fetch error:', err);
+        if (!firstError) firstError = String(err);
+      }
+      y += height + 48;
+    }
+  }
+
+  if (firstError) {
+    toast.error(`Miroエラー: ${firstError}`);
+    return false;
+  }
+  toast.success('Miroに追加しました');
+  return true;
+}
+
 export default function App() {
   const getUserId = (): string => {
     if (typeof window === 'undefined') return 'user-' + Date.now().toString();
@@ -68,6 +131,7 @@ export default function App() {
   const [pendingVisualContext, setPendingVisualContext] = useState<string | null>(null);
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
+  const miroColumnOffsetRef = useRef(0);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -374,6 +438,13 @@ export default function App() {
       }
 
       toast.success('スピーチフローに追加しました');
+
+      // Miroボードに非同期でシェイプを追加
+      const topicCount = new Set(newNodes.map(n => n.topicId)).size;
+      const offset = miroColumnOffsetRef.current;
+      syncNodesToMiro(newNodes, offset).then(success => {
+        if (success) miroColumnOffsetRef.current += topicCount;
+      });
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
