@@ -24,10 +24,14 @@ function findMiroIframePlugin(): Plugin {
               return;
             }
             const html = await fetchRes.text();
+            const seen = new Set<string>();
             const miroUrls: string[] = [];
-            const regex = /<iframe[^>]+src=['"]([^'"]*miro\.com[^'"]*)['"]/gi;
-            let match;
-            while ((match = regex.exec(html)) !== null) miroUrls.push(match[1]);
+            const addUrl = (u: string) => { if (!seen.has(u)) { seen.add(u); miroUrls.push(u); } };
+            let match: RegExpExecArray | null;
+            const iframeRe = /<iframe[^>]+src=['"]([^'"]*miro\.com[^'"]*)['"]/gi;
+            while ((match = iframeRe.exec(html)) !== null) addUrl(match[1]);
+            const urlRe = /https?:\/\/(?:www\.)?miro\.com\/app\/(?:board|live-embed)\/[^?#'"\s<>]+/gi;
+            while ((match = urlRe.exec(html)) !== null) addUrl(match[0]);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ miroUrls }));
           } catch (err) {

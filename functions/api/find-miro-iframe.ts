@@ -9,10 +9,21 @@ export async function onRequestPost(context: { request: Request }) {
     if (!res.ok) return Response.json({ error: `HTTP ${res.status}` }, { status: 400 });
 
     const html = await res.text();
+    const seen = new Set<string>();
     const miroUrls: string[] = [];
-    const regex = /<iframe[^>]+src=['"]([^'"]*miro\.com[^'"]*)['"]/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) miroUrls.push(match[1]);
+
+    const addUrl = (u: string) => {
+      if (!seen.has(u)) { seen.add(u); miroUrls.push(u); }
+    };
+
+    // 1. <iframe src="...miro.com..."> を検索
+    const iframeRegex = /<iframe[^>]+src=['"]([^'"]*miro\.com[^'"]*)['"]/gi;
+    let m: RegExpExecArray | null;
+    while ((m = iframeRegex.exec(html)) !== null) addUrl(m[1]);
+
+    // 2. HTML全体（script含む）からMiro board/live-embed URLを検索
+    const urlRegex = /https?:\/\/(?:www\.)?miro\.com\/app\/(?:board|live-embed)\/[^?#'"\s<>]+/gi;
+    while ((m = urlRegex.exec(html)) !== null) addUrl(m[0]);
 
     return Response.json({ miroUrls });
   } catch (err) {
