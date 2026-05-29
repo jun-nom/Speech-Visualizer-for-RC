@@ -50,15 +50,13 @@ function miroEstimateHeight(content: string, minH: number): number {
   return Math.max(minH, lines * LINE_HEIGHT + 80);
 }
 
-const MIRO_BATCH_GAP = 80; // gap between successive batches
-
 async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
-  // Determine starting position: bottom-right of last placed shape
+  // Determine starting position: 30px to the right of last placed shape
   let startX = 0;
-  let startY = 0;
+  const startY = 0;
   if (lastShapeId) {
     try {
       const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes/${lastShapeId}`, {
@@ -66,8 +64,8 @@ async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): P
       });
       if (res.ok) {
         const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
-        startX = data.position.x + data.geometry.width / 2 + MIRO_BATCH_GAP;
-        startY = data.position.y + data.geometry.height / 2 + MIRO_BATCH_GAP;
+        // startX = center of new shape = right edge of last shape + 30px gap + half width of new shape
+        startX = data.position.x + data.geometry.width / 2 + 30 + MIRO_NODE_WIDTH / 2;
       }
     } catch {
       // fall through to default (0, 0)
