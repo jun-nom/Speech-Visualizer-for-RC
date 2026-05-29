@@ -142,7 +142,6 @@ export default function App() {
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
   const miroColumnOffsetRef = useRef(0);
-  const [miroFocusWidgetId, setMiroFocusWidgetId] = useState<string | null>(null);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -453,11 +452,8 @@ export default function App() {
       // Miroボードに非同期でシェイプを追加
       const topicCount = new Set(newNodes.map(n => n.topicId)).size;
       const offset = miroColumnOffsetRef.current;
-      syncNodesToMiro(newNodes, offset).then(({ success, firstWidgetId }) => {
-        if (success) {
-          miroColumnOffsetRef.current += topicCount;
-          if (firstWidgetId) setMiroFocusWidgetId(firstWidgetId);
-        }
+      syncNodesToMiro(newNodes, offset).then(({ success }) => {
+        if (success) miroColumnOffsetRef.current += topicCount;
       });
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -688,7 +684,6 @@ export default function App() {
                 currentSession={currentViewingSession || activeSession}
                 currentUserId={currentUserId}
                 horizontalScroll={horizontalScroll}
-                miroFocusWidgetId={miroFocusWidgetId}
               />
             </div>
           )}

@@ -11,18 +11,10 @@ interface SpeechFlowCanvasProps {
   currentSession?: Session | null;
   currentUserId?: string;
   horizontalScroll?: boolean;
-  miroFocusWidgetId?: string | null;
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, miroFocusWidgetId }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false }: SpeechFlowCanvasProps) {
   const [activeTab, setActiveTab] = useState<'html' | 'miro'>('html');
-  const [iframeSrc, setIframeSrc] = useState(MIRO_EMBED_BASE);
-
-  useEffect(() => {
-    if (miroFocusWidgetId) {
-      setIframeSrc(`${MIRO_EMBED_BASE}?moveToWidget=${miroFocusWidgetId}&cot=1`);
-    }
-  }, [miroFocusWidgetId]);
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -264,7 +256,7 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
 
       {activeTab === 'miro' && (
         <iframe
-          src={iframeSrc}
+          src={MIRO_EMBED_BASE}
           className="flex-1 w-full"
           style={{ border: 'none' }}
           allow="fullscreen; clipboard-read; clipboard-write"
