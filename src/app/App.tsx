@@ -69,7 +69,10 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
   const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
   const enc = encodeURIComponent(boardId);
 
-  const stripHtml = (s: string) => s.replace(/<[^>]+>/g, '');
+  // Miro inserts zero-width chars (U+200B etc.) between CJK characters
+  const stripHtml = (s: string) => s
+    .replace(/<[^>]+>/g, '')
+    .replace(/[​‌‍﻿­]/g, '');
   const leftEdge = (item: MiroItemLike) => item.position.x - (item.geometry?.width ?? 0) / 2;
   const topEdge  = (item: MiroItemLike) => item.position.y - (item.geometry?.height ?? 0) / 2;
   const OFFSET = 80;
