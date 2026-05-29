@@ -90,6 +90,13 @@ export default function App() {
     return 'medium';
   });
 
+  const [feedbackTextDensity, setFeedbackTextDensity] = useState<TextDensity>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('speechflow-feedback-text-density') as TextDensity) || 'high';
+    }
+    return 'high';
+  });
+
   const [openaiApiKey, setOpenaiApiKey] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('speechflow-openai-key') || '';
@@ -124,6 +131,11 @@ export default function App() {
   const handleTextDensityChange = (density: TextDensity) => {
     setTextDensity(density);
     localStorage.setItem('speechflow-text-density', density);
+  };
+
+  const handleFeedbackTextDensityChange = (density: TextDensity) => {
+    setFeedbackTextDensity(density);
+    localStorage.setItem('speechflow-feedback-text-density', density);
   };
 
   const handleOpenaiApiKeyChange = (key: string) => {
@@ -393,7 +405,7 @@ export default function App() {
       let generatedFeedback: { comments: string[], questions: string[] };
 
       try {
-        generatedFeedback = await api.generateFeedback(inputHistory, textDensity);
+        generatedFeedback = await api.generateFeedback(inputHistory, feedbackTextDensity);
       } catch (apiError) {
         const errorMessage = (apiError instanceof Error ? apiError.message : 'Unknown error').toLowerCase();
         generatedFeedback = api.generateFallbackFeedback(inputHistory);
@@ -609,6 +621,8 @@ export default function App() {
               onNodeQuantityChange={handleNodeQuantityChange}
               textDensity={textDensity}
               onTextDensityChange={handleTextDensityChange}
+              feedbackTextDensity={feedbackTextDensity}
+              onFeedbackTextDensityChange={handleFeedbackTextDensityChange}
               isProcessing={isProcessing}
               isGeneratingFeedback={isGeneratingFeedback}
               isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}

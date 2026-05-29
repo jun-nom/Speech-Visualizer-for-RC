@@ -21,6 +21,8 @@ interface TextInputFormProps {
   onNodeQuantityChange?: (quantity: NodeQuantity) => void;
   textDensity?: TextDensity;
   onTextDensityChange?: (density: TextDensity) => void;
+  feedbackTextDensity?: TextDensity;
+  onFeedbackTextDensityChange?: (density: TextDensity) => void;
   isProcessing?: boolean;
   isGeneratingFeedback?: boolean;
   isInputDisabled?: boolean;
@@ -40,6 +42,8 @@ export function TextInputForm({
   onNodeQuantityChange,
   textDensity = 'medium',
   onTextDensityChange,
+  feedbackTextDensity = 'high',
+  onFeedbackTextDensityChange,
   isProcessing = false,
   isGeneratingFeedback = false,
   isInputDisabled = false,
@@ -208,7 +212,7 @@ export function TextInputForm({
               </Select>
             </>
           )}
-          <Button 
+          <Button
             onClick={onGenerateFeedback}
             variant="outline"
             size="sm"
@@ -224,6 +228,16 @@ export function TextInputForm({
               '感想と質問を生成'
             )}
           </Button>
+          <Select value={feedbackTextDensity} onValueChange={onFeedbackTextDensityChange}>
+            <SelectTrigger className="w-[120px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="high">テキスト量：多</SelectItem>
+              <SelectItem value="medium">テキスト量：中</SelectItem>
+              <SelectItem value="low">テキスト量：少</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
