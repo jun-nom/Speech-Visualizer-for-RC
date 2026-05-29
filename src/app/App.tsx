@@ -59,31 +59,68 @@ function extractMiroBoardId(url: string): string | null {
   }
 }
 
-async function findMiroFramePosition(boardId: string, token: string, frameTitle: string): Promise<{ x: number; y: number } | null> {
-  try {
-    const res = await fetch(
-      `https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/frames?limit=50`,
-      { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
-    );
-    if (!res.ok) return null;
-    const data = await res.json() as {
-      data: Array<{
-        data?: { title?: string };
-        position: { x: number; y: number };
-        geometry?: { width: number; height: number };
-      }>;
-    };
-    const frame = data.data.find(f => (f.data?.title ?? '').includes(frameTitle));
-    if (!frame) return null;
-    const halfW = (frame.geometry?.width ?? 0) / 2;
-    const halfH = (frame.geometry?.height ?? 0) / 2;
-    return { x: frame.position.x - halfW, y: frame.position.y - halfH };
-  } catch {
-    return null;
+type MiroItemLike = {
+  data?: { content?: string; title?: string };
+  position: { x: number; y: number };
+  geometry?: { width: number; height: number };
+};
+
+async function findMiroInitialPosition(boardId: string, token: string): Promise<{ x: number; y: number }> {
+  const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
+  const enc = encodeURIComponent(boardId);
+
+  const [itemsRes, framesRes] = await Promise.allSettled([
+    fetch(`https://api.miro.com/v2/boards/${enc}/items?limit=50`, { headers }),
+    fetch(`https://api.miro.com/v2/boards/${enc}/frames?limit=50`, { headers }),
+  ]);
+
+  let items: MiroItemLike[] = [];
+  let frames: MiroItemLike[] = [];
+  if (itemsRes.status === 'fulfilled' && itemsRes.value.ok) {
+    const d = await itemsRes.value.json() as { data: MiroItemLike[] };
+    items = d.data ?? [];
   }
+  if (framesRes.status === 'fulfilled' && framesRes.value.ok) {
+    const d = await framesRes.value.json() as { data: MiroItemLike[] };
+    frames = d.data ?? [];
+  }
+
+  const stripHtml = (s: string) => s.replace(/<[^>]+>/g, '');
+  const leftEdge = (item: MiroItemLike) => item.position.x - (item.geometry?.width ?? 0) / 2;
+  const topEdge  = (item: MiroItemLike) => item.position.y - (item.geometry?.height ?? 0) / 2;
+  const OFFSET = 80;
+
+  // 1. 「今ここ！」シェイプの右下
+  const imaKoko = items.find(item => {
+    const text = stripHtml(item.data?.content ?? item.data?.title ?? '');
+    return text.includes('今ここ！') || text.includes('今ここ!');
+  });
+  if (imaKoko) return {
+    x: imaKoko.position.x + (imaKoko.geometry?.width ?? 0) / 2 + OFFSET,
+    y: imaKoko.position.y + (imaKoko.geometry?.height ?? 0) / 2 + OFFSET,
+  };
+
+  // 2. 「セッションボード」フレームの左上
+  const sessionFrame = frames.find(f => (f.data?.title ?? '').includes('セッションボード'));
+  if (sessionFrame) return { x: leftEdge(sessionFrame) + OFFSET, y: topEdge(sessionFrame) + OFFSET };
+
+  // 3. 一番左にあるフレームの左上
+  if (frames.length > 0) {
+    const leftmost = frames.reduce((a, b) => leftEdge(a) <= leftEdge(b) ? a : b);
+    return { x: leftEdge(leftmost) + OFFSET, y: topEdge(leftmost) + OFFSET };
+  }
+
+  // 4. 一番左にある要素の左上
+  if (items.length > 0) {
+    const leftmost = items.reduce((a, b) => leftEdge(a) <= leftEdge(b) ? a : b);
+    return { x: leftEdge(leftmost) + OFFSET, y: topEdge(leftmost) + OFFSET };
+  }
+
+  // 5. デフォルト
+  return { x: 0, y: 0 };
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0, searchFrameTitle?: string): Promise<{ success: boolean; lastShapeId?: string }> {
+async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0, useSmartInitial = false): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
@@ -109,14 +146,11 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
     }
   }
 
-  // 履歴になければフレームタイトルで位置を検索
-  if (!foundInHistory && searchFrameTitle) {
-    const framePos = await findMiroFramePosition(boardId, token, searchFrameTitle);
-    if (framePos) {
-      startX = framePos.x;
-      startY = framePos.y;
-    }
-    // フレームが見つからなければ default (0, 0) のまま
+  // 履歴になければスマート初期位置を検索
+  if (!foundInHistory && useSmartInitial) {
+    const pos = await findMiroInitialPosition(boardId, token);
+    startX = pos.x;
+    startY = pos.y;
   }
 
   const topicOrder: string[] = [];
@@ -533,7 +567,7 @@ export default function App() {
       if (venueEnabled) {
         const venueBoardId = extractMiroBoardId(venueUrl);
         if (venueBoardId) {
-          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, 0, 0, 'セッションボード').then(({ success, lastShapeId }) => {
+          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, 0, 0, true).then(({ success, lastShapeId }) => {
             if (success && lastShapeId) {
               venueShapeHistoryRef.current = [lastShapeId, ...venueShapeHistoryRef.current].slice(0, 50);
             }
