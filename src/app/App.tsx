@@ -613,7 +613,6 @@ export default function App() {
               value={currentInput + interimTranscript}
               onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
               onSubmit={handleAddToFlow}
-              onGenerateFeedback={handleGenerateFeedback}
               inputHistory={inputHistory}
               informationLevel={informationLevel}
               onInformationLevelChange={handleInformationLevelChange}
@@ -621,12 +620,8 @@ export default function App() {
               onNodeQuantityChange={handleNodeQuantityChange}
               textDensity={textDensity}
               onTextDensityChange={handleTextDensityChange}
-              feedbackTextDensity={feedbackTextDensity}
-              onFeedbackTextDensityChange={handleFeedbackTextDensityChange}
               isProcessing={isProcessing}
-              isGeneratingFeedback={isGeneratingFeedback}
               isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}
-              isFeedbackDisabled={false}
               userRole={isViewingOtherUserSession ? 'viewer' : null}
             />
           </div>
@@ -635,7 +630,14 @@ export default function App() {
         {/* Right Sidebar - Feedback */}
         {showPanels && (
           <div className="speech-flow-feedback flex-shrink-0 w-[280px] bg-white border-l border-gray-200">
-            <FeedbackGenerator feedback={feedback} />
+            <FeedbackGenerator
+              feedback={feedback}
+              onGenerateFeedback={handleGenerateFeedback}
+              isGeneratingFeedback={isGeneratingFeedback}
+              feedbackTextDensity={feedbackTextDensity}
+              onFeedbackTextDensityChange={handleFeedbackTextDensityChange}
+              isFeedbackDisabled={false}
+            />
           </div>
         )}
       </div>

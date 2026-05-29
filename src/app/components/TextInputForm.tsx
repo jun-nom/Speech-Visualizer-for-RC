@@ -13,7 +13,6 @@ interface TextInputFormProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: (text: string, informationLevel: InformationLevel) => void;
-  onGenerateFeedback: () => void;
   inputHistory: string[];
   informationLevel: InformationLevel;
   onInformationLevelChange: (level: InformationLevel) => void;
@@ -21,12 +20,8 @@ interface TextInputFormProps {
   onNodeQuantityChange?: (quantity: NodeQuantity) => void;
   textDensity?: TextDensity;
   onTextDensityChange?: (density: TextDensity) => void;
-  feedbackTextDensity?: TextDensity;
-  onFeedbackTextDensityChange?: (density: TextDensity) => void;
   isProcessing?: boolean;
-  isGeneratingFeedback?: boolean;
   isInputDisabled?: boolean;
-  isFeedbackDisabled?: boolean;
   userRole?: 'input' | 'feedback' | 'viewer' | null;
 }
 
@@ -34,7 +29,6 @@ export function TextInputForm({
   value,
   onChange,
   onSubmit,
-  onGenerateFeedback,
   inputHistory,
   informationLevel,
   onInformationLevelChange,
@@ -42,12 +36,8 @@ export function TextInputForm({
   onNodeQuantityChange,
   textDensity = 'medium',
   onTextDensityChange,
-  feedbackTextDensity = 'high',
-  onFeedbackTextDensityChange,
   isProcessing = false,
-  isGeneratingFeedback = false,
   isInputDisabled = false,
-  isFeedbackDisabled = false,
   userRole = null
 }: TextInputFormProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -130,11 +120,9 @@ export function TextInputForm({
 
   // Check if current user can perform input actions
   const canInput = userRole === null || userRole === 'input';
-  const canGenerateFeedback = userRole === null || userRole === 'feedback' || userRole === 'viewer';
 
   // Determine if input is disabled based on role
   const inputDisabled = isInputDisabled || (userRole !== null && !canInput);
-  const feedbackDisabled = isFeedbackDisabled;
 
   return (
     <div className="text-input-form space-y-4">
@@ -148,7 +136,7 @@ export function TextInputForm({
           )}
           {userRole === 'feedback' && (
             <div className="bg-green-50 text-green-700 p-2 rounded">
-              💭 あなたは感想・質問担当です。セッション内容から��想と質問を生成できます。
+              💭 あなたは感想・質問担当です。セッション内容から感想と質問を生成できます。
             </div>
           )}
           {userRole === 'viewer' && (
@@ -160,86 +148,57 @@ export function TextInputForm({
       )}
 
       {/* Form Header with Buttons */}
-      <div className="flex items-center justify-start">
-        <div className="flex items-center gap-2">
-          {/* Only show "Add to Speech Flow" button for non-viewers */}
-          {userRole !== 'viewer' && (
-            <>
-              <Button 
-                onClick={() => onSubmit(value, informationLevel)}
-                disabled={!value.trim() || isProcessing || inputDisabled}
-                size="sm"
-                title={inputDisabled && userRole !== 'input' ? 'テキスト入力担当者のみ使用できます' : ''}
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    処理中...
-                  </>
-                ) : (
-                  'スピーチフローに追加'
-                )}
-              </Button>
-              <Select value={informationLevel} onValueChange={onInformationLevelChange}>
-                <SelectTrigger className="w-[120px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">トピック量：多</SelectItem>
-                  <SelectItem value="medium">トピック量：中</SelectItem>
-                  <SelectItem value="low">トピック量：少</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={nodeQuantity} onValueChange={onNodeQuantityChange}>
-                <SelectTrigger className="w-[120px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">ノード量：多</SelectItem>
-                  <SelectItem value="medium">ノード量：中</SelectItem>
-                  <SelectItem value="low">ノード量：少</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={textDensity} onValueChange={onTextDensityChange}>
-                <SelectTrigger className="w-[120px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="high">テキスト量：多</SelectItem>
-                  <SelectItem value="medium">テキスト量：中</SelectItem>
-                  <SelectItem value="low">テキスト量：少</SelectItem>
-                </SelectContent>
-              </Select>
-            </>
-          )}
-          <Button
-            onClick={onGenerateFeedback}
-            variant="outline"
-            size="sm"
-            disabled={isGeneratingFeedback || feedbackDisabled}
-            title={feedbackDisabled && userRole !== 'feedback' ? '感想・質問担当者のみ使用できます' : ''}
-          >
-            {isGeneratingFeedback ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                生成中...
-              </>
-            ) : (
-              '感想と質問を生成'
-            )}
-          </Button>
-          <Select value={feedbackTextDensity} onValueChange={onFeedbackTextDensityChange}>
-            <SelectTrigger className="w-[120px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="high">テキスト量：多</SelectItem>
-              <SelectItem value="medium">テキスト量：中</SelectItem>
-              <SelectItem value="low">テキスト量：少</SelectItem>
-            </SelectContent>
-          </Select>
+      {userRole !== 'viewer' && (
+        <div className="flex items-center justify-start">
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => onSubmit(value, informationLevel)}
+              disabled={!value.trim() || isProcessing || inputDisabled}
+              size="sm"
+              title={inputDisabled && userRole !== 'input' ? 'テキスト入力担当者のみ使用できます' : ''}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  処理中...
+                </>
+              ) : (
+                'スピーチフローに追加'
+              )}
+            </Button>
+            <Select value={informationLevel} onValueChange={onInformationLevelChange}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high">トピック量：多</SelectItem>
+                <SelectItem value="medium">トピック量：中</SelectItem>
+                <SelectItem value="low">トピック量：少</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={nodeQuantity} onValueChange={onNodeQuantityChange}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high">ノード量：多</SelectItem>
+                <SelectItem value="medium">ノード量：中</SelectItem>
+                <SelectItem value="low">ノード量：少</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={textDensity} onValueChange={onTextDensityChange}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="high">テキスト量：多</SelectItem>
+                <SelectItem value="medium">テキスト量：中</SelectItem>
+                <SelectItem value="low">テキスト量：少</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
+      )}
 
       {userRole !== 'viewer' && (
         <p className="text-sm text-gray-600">

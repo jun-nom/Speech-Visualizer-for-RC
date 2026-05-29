@@ -1,15 +1,31 @@
 import React from 'react';
-import { MessageCircle, HelpCircle, MoreHorizontal } from 'lucide-react';
+import { MessageCircle, HelpCircle, MoreHorizontal, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+
+type TextDensity = 'high' | 'medium' | 'low';
 
 interface FeedbackGeneratorProps {
   feedback: {
     comments: string[];
     questions: string[];
   };
+  onGenerateFeedback: () => void;
+  isGeneratingFeedback?: boolean;
+  feedbackTextDensity?: TextDensity;
+  onFeedbackTextDensityChange?: (density: TextDensity) => void;
+  isFeedbackDisabled?: boolean;
 }
 
-export function FeedbackGenerator({ feedback }: FeedbackGeneratorProps) {
+export function FeedbackGenerator({
+  feedback,
+  onGenerateFeedback,
+  isGeneratingFeedback = false,
+  feedbackTextDensity = 'high',
+  onFeedbackTextDensityChange,
+  isFeedbackDisabled = false,
+}: FeedbackGeneratorProps) {
   const hasContent = feedback.comments.length > 0 || feedback.questions.length > 0;
 
   const handleCopyToClipboard = async (content: string) => {
@@ -83,9 +99,34 @@ export function FeedbackGenerator({ feedback }: FeedbackGeneratorProps) {
       {/* Header */}
       <div className="feedback-header p-4 border-b border-gray-200">
         <h3>感想・質問</h3>
-        <p className="text-sm text-gray-600">
-          様々な立場の参加者の感想と質問が表示されます（クリックでコピー）
-        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <Button
+            onClick={onGenerateFeedback}
+            variant="outline"
+            size="sm"
+            disabled={isGeneratingFeedback || isFeedbackDisabled}
+          >
+            {isGeneratingFeedback ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                生成中...
+              </>
+            ) : (
+              '感想と質問を生成'
+            )}
+          </Button>
+          <Select value={feedbackTextDensity} onValueChange={onFeedbackTextDensityChange}>
+            <SelectTrigger className="w-[100px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="high">テキスト量：多</SelectItem>
+              <SelectItem value="medium">テキスト量：中</SelectItem>
+              <SelectItem value="low">テキスト量：少</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {hasContent && <p className="text-xs text-gray-400 mt-2">クリックでコピー</p>}
       </div>
 
       {/* Content */}
