@@ -89,6 +89,8 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
     }
   } catch { /* ignore */ }
 
+  console.log('[Miro debug] frames:', frames.map(f => ({ title: f.data?.title, content: f.data?.content })));
+
   // 1. フレームから「今ここ！」を検索
   const imaKokoFrame = frames.find(matchesImaKoko);
   if (imaKokoFrame) return {
@@ -108,6 +110,7 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
       if (!res.ok) break;
       const d = await res.json() as { data: MiroItemLike[]; cursor?: string };
       if (page === 0) firstPageItems = d.data ?? [];
+      console.log(`[Miro debug] items page ${page}:`, (d.data ?? []).map(i => ({ type: (i as any).type, content: i.data?.content, title: i.data?.title })));
       imaKokoItem = (d.data ?? []).find(matchesImaKoko);
       cursor = d.cursor;
     } catch { break; }
