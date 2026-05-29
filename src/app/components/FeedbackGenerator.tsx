@@ -112,7 +112,7 @@ export function FeedbackGenerator({
                 生成中...
               </>
             ) : (
-              '感想と質問を生成'
+              '生成'
             )}
           </Button>
           <Select value={feedbackTextDensity} onValueChange={onFeedbackTextDensityChange}>
