@@ -52,7 +52,7 @@ function miroEstimateHeight(content: string, minH: number): number {
 
 function extractMiroBoardId(url: string): string | null {
   try {
-    const match = new URL(url).pathname.match(/\/board\/([^/?#]+)/);
+    const match = new URL(url).pathname.match(/\/(?:board|live-embed)\/([^/?#]+)/);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -891,9 +891,37 @@ export default function App() {
                   localStorage.setItem('miro-venue-url', url);
                 }}
                 venueIframeSrc={venueIframeSrc}
-                onVenueGo={() => {
+                onVenueGo={async () => {
                   const boardId = extractMiroBoardId(venueUrl);
-                  if (boardId) setVenueIframeSrc(`https://miro.com/app/live-embed/${boardId}/`);
+                  if (boardId) {
+                    setVenueIframeSrc(`https://miro.com/app/live-embed/${boardId}/`);
+                    return;
+                  }
+                  if (!venueUrl.startsWith('http')) return;
+                  // 非MiroのURL → HTMLを取得してMiro iframeを探す
+                  try {
+                    const res = await fetch('/api/find-miro-iframe', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ url: venueUrl }),
+                    });
+                    if (!res.ok) { toast.error('ページの取得に失敗しました'); return; }
+                    const data = await res.json() as { miroUrls?: string[]; error?: string };
+                    if (data.miroUrls && data.miroUrls.length > 0) {
+                      const foundUrl = data.miroUrls[0];
+                      const foundBoardId = extractMiroBoardId(foundUrl);
+                      if (foundBoardId) {
+                        setVenueUrl(foundUrl);
+                        localStorage.setItem('miro-venue-url', foundUrl);
+                        setVenueIframeSrc(`https://miro.com/app/live-embed/${foundBoardId}/`);
+                        toast.success('MiroボードのURLを検出しました');
+                        return;
+                      }
+                    }
+                    toast.error(data.error ?? 'ページのHTMLにMiroのiframeが見つかりませんでした');
+                  } catch {
+                    toast.error('ページの取得に失敗しました');
+                  }
                 }}
                 venueEnabled={venueEnabled}
                 onVenueEnabledChange={(enabled) => {
