@@ -28,6 +28,7 @@ export interface Session {
   nodes: FlowNode[];
   createdBy: string;
   isPublic: boolean;
+  draftInput?: string;
 }
 
 export default function App() {
@@ -227,9 +228,16 @@ export default function App() {
         isPublic: true
       };
 
-      const updatedSessions = [...sessions.map(s => ({ ...s, isActive: false })), newSession];
+      // 現在のテキスト入力内容をアクティブセッションのドラフトとして保存
+      const sessionsWithDraft = sessions.map(s =>
+        s.isActive && currentInput.trim()
+          ? { ...s, isActive: false, draftInput: currentInput }
+          : { ...s, isActive: false }
+      );
+      const updatedSessions = [...sessionsWithDraft, newSession];
       setSessions(updatedSessions);
       setInputHistory([]);
+      setCurrentInput('');
       setFeedback({ comments: [], questions: [] });
       saveSessionsToLocal(updatedSessions);
       saveToSupabase(newSession);
@@ -470,11 +478,13 @@ export default function App() {
       const updatedSessions = sessions.map(s => ({ ...s, isActive: s.id === sessionId }));
       setSessions(updatedSessions);
       setInputHistory(selectedSession.inputs);
+      setCurrentInput(selectedSession.draftInput || '');
       setFeedback({ comments: [], questions: [] });
       saveSessionsToLocal(updatedSessions);
     } else {
       setSessions(sessions.map(s => ({ ...s, isActive: false })));
       setInputHistory(selectedSession.inputs);
+      setCurrentInput(selectedSession.draftInput || '');
       setFeedback({ comments: [], questions: [] });
       toast.info('他のユーザのセッションを閲覧しています（読み取り専用）');
     }
