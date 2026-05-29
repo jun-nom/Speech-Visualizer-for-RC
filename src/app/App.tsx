@@ -217,8 +217,6 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
     console.log('[Miro pos] foundInHistory:', foundInHistory, 'pos:', JSON.stringify(pos));
     startX = pos.x;
     startY = pos.y;
-  } else {
-    console.log('[Miro pos] foundInHistory:', foundInHistory, 'startX:', startX, 'startY:', startY);
   }
 
   const topicOrder: string[] = [];
@@ -317,6 +315,7 @@ export default function App() {
   const [venueEnabled, setVenueEnabled] = useState(() =>
     typeof window !== 'undefined' ? localStorage.getItem('miro-venue-enabled') === 'true' : false
   );
+  const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('html');
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -784,8 +783,23 @@ export default function App() {
       {/* Header */}
       <header className="speech-flow-header bg-white border-b border-gray-200 px-6 py-0 h-[56px]">
         <div className="flex items-center justify-between h-full gap-3 min-w-0">
-          <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-            <h1 className="text-xl whitespace-nowrap shrink-0">スピーチフロー可視化ツール</h1>
+          <div className="flex items-center gap-0 min-w-0 overflow-hidden h-full">
+            <h1 className="text-xl whitespace-nowrap shrink-0 mr-4">スピーチフロー可視化ツール</h1>
+            <div className="flex h-full items-stretch">
+              {(['html', 'miro', 'venue'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 text-xs border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab
+                      ? 'border-blue-500 text-blue-600 font-medium'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {tab === 'html' ? 'HTMLオブジェクト' : tab === 'miro' ? 'Miroシェイプ' : 'Miro会場'}
+                </button>
+              ))}
+            </div>
             {(supabaseStatus === 'quota_exceeded' || supabaseStatus === 'error') && (
               <span className="text-xs text-amber-600 truncate min-w-0">
                 {supabaseStatus === 'quota_exceeded'
@@ -886,6 +900,7 @@ export default function App() {
                   setVenueEnabled(enabled);
                   localStorage.setItem('miro-venue-enabled', String(enabled));
                 }}
+                activeTab={activeTab}
               />
             </div>
           )}

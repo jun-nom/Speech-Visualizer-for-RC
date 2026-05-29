@@ -17,10 +17,10 @@ interface SpeechFlowCanvasProps {
   onVenueGo: () => void;
   venueEnabled: boolean;
   onVenueEnabledChange: (enabled: boolean) => void;
+  activeTab: 'html' | 'miro' | 'venue';
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, venueEnabled, onVenueEnabledChange }: SpeechFlowCanvasProps) {
-  const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('html');
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, venueEnabled, onVenueEnabledChange, activeTab }: SpeechFlowCanvasProps) {
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -181,28 +181,6 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
 
   return (
     <div className="speech-flow-canvas h-full flex flex-col bg-gray-50">
-      {/* Header */}
-      <div className="speech-flow-canvas-header bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-end gap-4 px-4 pt-4 pb-0">
-          <h2 className="flex-shrink-0 pb-[6px]">スピーチフロー</h2>
-          <div className="flex">
-            {(['html', 'miro', 'venue'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 text-xs border-b-2 transition-colors ${
-                  activeTab === tab
-                    ? 'border-blue-500 text-blue-600 font-medium'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                {tab === 'html' ? 'HTMLオブジェクト' : tab === 'miro' ? 'Miroシェイプ' : 'Miro会場'}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* HTML tab — always in DOM, hidden when Miro tab is active */}
       <div className={`flex flex-col flex-1 min-h-0 ${activeTab !== 'html' ? 'hidden' : ''}`}>
         <div className="px-4 py-2 bg-white border-b border-gray-100 flex-shrink-0">
@@ -277,9 +255,9 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
             onChange={e => onVenueUrlChange(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && onVenueGo()}
             placeholder="https://miro.com/app/board/..."
-            className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 min-w-0"
+            className="flex-1 text-xs border border-gray-300 rounded px-2 h-7 min-w-0"
           />
-          <Button size="sm" onClick={onVenueGo} className="shrink-0">GO</Button>
+          <Button size="sm" onClick={onVenueGo} className="shrink-0 h-7 px-3 text-xs">GO</Button>
           <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap cursor-pointer">
             <input
               type="checkbox"
