@@ -89,8 +89,6 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
     }
   } catch { /* ignore */ }
 
-  console.log('[Miro debug] frames:', JSON.stringify(frames.map(f => f.data?.title)));
-
   // 1. フレームから「今ここ！」を検索
   const imaKokoFrame = frames.find(matchesImaKoko);
   if (imaKokoFrame) return {
@@ -98,25 +96,26 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
     y: imaKokoFrame.position.y + (imaKokoFrame.geometry?.height ?? 0) / 2 + OFFSET,
   };
 
-  // アイテムをページネーションしながら「今ここ！」を検索（最大5ページ）
+  // /shapes エンドポイントで「今ここ！」を検索（ページ上限なし）
   let firstPageItems: MiroItemLike[] = [];
   let imaKokoItem: MiroItemLike | undefined;
-  let cursor: string | undefined;
-  let page = 0;
-  do {
-    const url = `https://api.miro.com/v2/boards/${enc}/items?limit=50${cursor ? `&cursor=${cursor}` : ''}`;
-    try {
-      const res = await fetch(url, { headers });
-      if (!res.ok) break;
-      const d = await res.json() as { data: MiroItemLike[]; cursor?: string };
-      if (page === 0) firstPageItems = d.data ?? [];
-      const hits = (d.data ?? []).filter(i => (i.data?.content ?? i.data?.title ?? '').includes('今'));
-      if (hits.length > 0) console.log(`[Miro debug] page ${page} 今ヒット:`, JSON.stringify(hits.map(i => ({ content: i.data?.content, title: i.data?.title }))));
-      imaKokoItem = (d.data ?? []).find(matchesImaKoko);
-      cursor = d.cursor;
-    } catch { break; }
-    page++;
-  } while (!imaKokoItem && cursor && page < 5);
+  for (const endpoint of ['shapes', 'sticky_notes', 'items'] as const) {
+    let cursor: string | undefined;
+    let page = 0;
+    do {
+      const url = `https://api.miro.com/v2/boards/${enc}/${endpoint}?limit=50${cursor ? `&cursor=${cursor}` : ''}`;
+      try {
+        const res = await fetch(url, { headers });
+        if (!res.ok) break;
+        const d = await res.json() as { data: MiroItemLike[]; cursor?: string };
+        if (endpoint === 'items' && page === 0) firstPageItems = d.data ?? [];
+        imaKokoItem = (d.data ?? []).find(matchesImaKoko);
+        cursor = d.cursor;
+      } catch { break; }
+      page++;
+    } while (!imaKokoItem && cursor);
+    if (imaKokoItem) break;
+  }
 
   // 1. アイテムから「今ここ！」を検索
   if (imaKokoItem) return {
