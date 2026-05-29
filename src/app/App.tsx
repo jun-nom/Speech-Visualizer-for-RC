@@ -64,8 +64,8 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
   if (!token) return { success: false };
 
   // Find the most recent shape that still exists on the board
-  let startX = -2000;
-  let startY = 1000;
+  let startX = -20000;
+  let startY = 10000;
   for (const shapeId of shapeHistory) {
     try {
       const res = await fetch(`https://api.miro.com/v2/boards/${encodeURIComponent(boardId)}/shapes/${shapeId}`, {
