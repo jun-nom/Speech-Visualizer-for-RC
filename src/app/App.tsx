@@ -50,25 +50,27 @@ function miroEstimateHeight(content: string, minH: number): number {
   return Math.max(minH, lines * LINE_HEIGHT + 80);
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], lastShapeId: string | null): Promise<{ success: boolean; lastShapeId?: string }> {
+async function syncNodesToMiro(nodes: FlowNode[], shapeHistory: string[]): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
-  // Determine starting position: 30px to the right of last placed shape, same Y
+  // Find the most recent shape that still exists on the board
   let startX = 0;
   let startY = 0;
-  if (lastShapeId) {
+  for (const shapeId of shapeHistory) {
     try {
-      const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes/${lastShapeId}`, {
+      const res = await fetch(`https://api.miro.com/v2/boards/${MIRO_BOARD_ID}/shapes/${shapeId}`, {
         headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
       });
       if (res.ok) {
         const data = await res.json() as { position: { x: number; y: number }; geometry: { width: number; height: number } };
         startX = data.position.x + data.geometry.width / 2 + 60 + MIRO_NODE_WIDTH / 2;
         startY = data.position.y;
+        break;
       }
+      // 404 = deleted → try next in history
     } catch {
-      // fall through to default (0, 0)
+      // network error → try next
     }
   }
 
@@ -159,7 +161,7 @@ export default function App() {
   const [pendingVisualContext, setPendingVisualContext] = useState<string | null>(null);
   const isAnalyzingFrameRef = useRef(false);
   const latestFrameRef = useRef<string | null>(null);
-  const lastMiroShapeIdRef = useRef<string | null>(null);
+  const miroShapeHistoryRef = useRef<string[]>([]);
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -468,8 +470,10 @@ export default function App() {
       toast.success('スピーチフローに追加しました');
 
       // Miroボードに非同期でシェイプを追加
-      syncNodesToMiro(newNodes, lastMiroShapeIdRef.current).then(({ success, lastShapeId }) => {
-        if (success && lastShapeId) lastMiroShapeIdRef.current = lastShapeId;
+      syncNodesToMiro(newNodes, miroShapeHistoryRef.current).then(({ success, lastShapeId }) => {
+        if (success && lastShapeId) {
+          miroShapeHistoryRef.current = [lastShapeId, ...miroShapeHistoryRef.current].slice(0, 50);
+        }
       });
     } catch (error) {
       toast.error('処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : 'Unknown error'));
