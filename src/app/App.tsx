@@ -147,7 +147,7 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
 
     return {
       x: absX + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET + 310,
-      y: absY - 100,
+      y: absY - 300,
     };
   }
 
