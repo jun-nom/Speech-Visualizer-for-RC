@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Plus, Circle, Trash2, User, Users, Loader2 } from 'lucide-react';
 import { Session } from '../App';
@@ -32,6 +31,7 @@ export function SessionManager({
   isCreatingSession = false,
   isCompact = false,
 }: SessionManagerProps) {
+  const [sessionTab, setSessionTab] = useState<'my' | 'others'>('my');
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [isCleanupDialogOpen, setIsCleanupDialogOpen] = useState(false);
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
@@ -155,67 +155,72 @@ export function SessionManager({
       </div>
 
       {/* Tabs for My Sessions and Others' Sessions */}
-      <div className="session-tabs flex-1 overflow-hidden">
-        <Tabs defaultValue="my-sessions" className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 mx-4 mt-4">
-            <TabsTrigger value="my-sessions" className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              自分のセッション
-            </TabsTrigger>
-            <TabsTrigger value="others-sessions" className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              他のユーザー
-            </TabsTrigger>
-          </TabsList>
+      <div className="session-tabs flex-1 overflow-hidden flex flex-col">
+        <div className="flex border-b border-gray-200 px-4 mt-2">
+          {([['my', <User className="w-3.5 h-3.5" />, '自分のセッション'], ['others', <Users className="w-3.5 h-3.5" />, '他のユーザー']] as const).map(([tab, icon, label]) => (
+            <button
+              key={tab}
+              onClick={() => setSessionTab(tab)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border-b-2 transition-colors whitespace-nowrap ${
+                sessionTab === tab
+                  ? 'border-blue-500 text-blue-600 font-medium'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {icon}{label}
+            </button>
+          ))}
+        </div>
 
-          <TabsContent value="my-sessions" className="flex-1 overflow-y-auto mt-0 px-4 pb-4">
-            <div className="space-y-2 mt-4">
-              {mySessions.map((session) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  currentUserId={currentUserId}
-                  isActive={session.isActive}
-                  onClick={() => onSwitchSession(session.id)}
-                  onDelete={(e) => handleDeleteClick(session.id, e)}
-                />
-              ))}
-              {mySessions.length === 0 && (
-                <div className="text-xs text-gray-500 text-center py-8">
-                  セッションがありません
-                  <br />
-                  「新規セッション」ボタンで作成してください
-                </div>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="others-sessions" className="flex-1 overflow-y-auto mt-0 px-4 pb-4">
-            <div className="space-y-2 mt-4">
-              {othersSessions.map((session) => {
-                const isCurrentlyViewing = currentViewingSession && currentViewingSession.id === session.id;
-                return (
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="space-y-2 mt-4">
+            {sessionTab === 'my' ? (
+              <>
+                {mySessions.map((session) => (
                   <SessionItem
                     key={session.id}
                     session={session}
                     currentUserId={currentUserId}
-                    isActive={false}
-                    isViewing={isCurrentlyViewing}
+                    isActive={session.isActive}
                     onClick={() => onSwitchSession(session.id)}
-                    onDelete={null}
+                    onDelete={(e) => handleDeleteClick(session.id, e)}
                   />
-                );
-              })}
-              {othersSessions.length === 0 && (
-                <div className="text-xs text-gray-500 text-center py-8">
-                  他のユーザーのセッションがありません
-                  <br />
-                  他のユーザーがセッションを作成すると表示されます
-                </div>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+                ))}
+                {mySessions.length === 0 && (
+                  <div className="text-xs text-gray-500 text-center py-8">
+                    セッションがありません
+                    <br />
+                    「新規セッション」ボタンで作成してください
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {othersSessions.map((session) => {
+                  const isCurrentlyViewing = currentViewingSession && currentViewingSession.id === session.id;
+                  return (
+                    <SessionItem
+                      key={session.id}
+                      session={session}
+                      currentUserId={currentUserId}
+                      isActive={false}
+                      isViewing={isCurrentlyViewing}
+                      onClick={() => onSwitchSession(session.id)}
+                      onDelete={null}
+                    />
+                  );
+                })}
+                {othersSessions.length === 0 && (
+                  <div className="text-xs text-gray-500 text-center py-8">
+                    他のユーザーのセッションがありません
+                    <br />
+                    他のユーザーがセッションを作成すると表示されます
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Session Info */}
