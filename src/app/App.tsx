@@ -147,7 +147,7 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
 
     return {
       x: absX + (imaKokoItem.geometry?.width ?? 0) / 2 + OFFSET + 310,
-      y: absY,
+      y: absY - 100,
     };
   }
 
@@ -312,9 +312,7 @@ export default function App() {
     typeof window !== 'undefined' ? localStorage.getItem('miro-venue-url') || '' : ''
   );
   const [venueIframeSrc, setVenueIframeSrc] = useState('');
-  const [venueEnabled, setVenueEnabled] = useState(() =>
-    typeof window !== 'undefined' ? localStorage.getItem('miro-venue-enabled') === 'true' : false
-  );
+  const [venueEnabled, setVenueEnabled] = useState(false);
   const [venueError, setVenueError] = useState('');
   const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('html');
 
@@ -927,6 +925,10 @@ export default function App() {
                   } catch {
                     setVenueError('ページの取得に失敗しました');
                   }
+                }}
+                onVenueDisconnect={() => {
+                  setVenueIframeSrc('');
+                  setVenueEnabled(false);
                 }}
                 venueEnabled={venueEnabled}
                 onVenueEnabledChange={(enabled) => {
