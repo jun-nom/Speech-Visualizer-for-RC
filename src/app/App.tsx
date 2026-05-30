@@ -171,7 +171,7 @@ async function findMiroInitialPosition(boardId: string, token: string): Promise<
   return { x: 0, y: 0 };
 }
 
-async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0, useSmartInitial = false): Promise<{ success: boolean; lastShapeId?: string }> {
+async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory: string[], defaultX = 0, defaultY = 0, useSmartInitial = false, label = 'Miro'): Promise<{ success: boolean; lastShapeId?: string }> {
   const token = import.meta.env.VITE_MIRO_ACCESS_TOKEN as string | undefined;
   if (!token) return { success: false };
 
@@ -264,8 +264,8 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
     }
   }
 
-  if (firstError) { toast.error(`Miroエラー: ${firstError}`); return { success: false }; }
-  toast.success('Miroに追加しました');
+  if (firstError) { toast.error(`${label}エラー: ${firstError}`); return { success: false }; }
+  toast.success(`${label}に追加しました`);
   return { success: true, lastShapeId: newLastShapeId };
 }
 
@@ -625,7 +625,7 @@ export default function App() {
       toast.success('スピーチフローに追加しました');
 
       // メインMiroボードに非同期でシェイプを追加
-      syncNodesToMiro(newNodes, MIRO_BOARD_ID, miroShapeHistoryRef.current).then(({ success, lastShapeId }) => {
+      syncNodesToMiro(newNodes, MIRO_BOARD_ID, miroShapeHistoryRef.current, 0, 0, false, 'Miroシェイプ').then(({ success, lastShapeId }) => {
         if (success && lastShapeId) {
           miroShapeHistoryRef.current = [lastShapeId, ...miroShapeHistoryRef.current].slice(0, 50);
         }
@@ -635,7 +635,7 @@ export default function App() {
       if (venueEnabled) {
         const venueBoardId = extractMiroBoardId(venueUrl);
         if (venueBoardId) {
-          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, 0, 0, true).then(({ success, lastShapeId }) => {
+          syncNodesToMiro(newNodes, venueBoardId, venueShapeHistoryRef.current, 0, 0, true, 'Miro会場').then(({ success, lastShapeId }) => {
             if (success && lastShapeId) {
               venueShapeHistoryRef.current = [lastShapeId, ...venueShapeHistoryRef.current].slice(0, 50);
             }
