@@ -789,7 +789,7 @@ export default function App() {
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 text-xs border-b-2 transition-colors whitespace-nowrap ${
+                  className={`px-3 text-sm border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab
                       ? 'border-blue-500 text-blue-600 font-medium'
                       : 'border-transparent text-gray-400 hover:text-gray-600'
@@ -808,10 +808,10 @@ export default function App() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            <Button variant="ghost" size="sm" onClick={() => setIsLogViewerOpen(true)} className="text-xs text-gray-500">
+            <Button variant="ghost" size="sm" onClick={() => setIsLogViewerOpen(true)} className="text-sm text-gray-500">
               ログ
             </Button>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
+            <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none whitespace-nowrap">
               <input
                 type="checkbox"
                 checked={showPanels}
