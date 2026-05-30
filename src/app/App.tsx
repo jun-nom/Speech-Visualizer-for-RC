@@ -814,18 +814,6 @@ export default function App() {
             <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
               <input
                 type="checkbox"
-                checked={horizontalScroll}
-                onChange={(e) => {
-                  setHorizontalScroll(e.target.checked);
-                  localStorage.setItem('speechflow-horizontal-scroll', String(e.target.checked));
-                }}
-                className="w-3.5 h-3.5 cursor-pointer"
-              />
-              横スクロール
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
-              <input
-                type="checkbox"
                 checked={showPanels}
                 onChange={(e) => setShowPanels(e.target.checked)}
                 className="w-3.5 h-3.5 cursor-pointer"
@@ -884,6 +872,10 @@ export default function App() {
                 currentSession={currentViewingSession || activeSession}
                 currentUserId={currentUserId}
                 horizontalScroll={horizontalScroll}
+                onHorizontalScrollChange={(v) => {
+                  setHorizontalScroll(v);
+                  localStorage.setItem('speechflow-horizontal-scroll', String(v));
+                }}
                 venueUrl={venueUrl}
                 onVenueUrlChange={(url) => {
                   setVenueUrl(url);

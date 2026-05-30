@@ -11,6 +11,7 @@ interface SpeechFlowCanvasProps {
   currentSession?: Session | null;
   currentUserId?: string;
   horizontalScroll?: boolean;
+  onHorizontalScrollChange?: (val: boolean) => void;
   venueUrl: string;
   onVenueUrlChange: (url: string) => void;
   venueIframeSrc: string;
@@ -22,7 +23,7 @@ interface SpeechFlowCanvasProps {
   activeTab: 'html' | 'miro' | 'venue';
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, onVenueDisconnect, venueEnabled, onVenueEnabledChange, venueError, activeTab }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, onHorizontalScrollChange, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, onVenueDisconnect, venueEnabled, onVenueEnabledChange, venueError, activeTab }: SpeechFlowCanvasProps) {
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -185,10 +186,21 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
     <div className="speech-flow-canvas h-full flex flex-col bg-gray-50">
       {/* HTML tab — always in DOM, hidden when Miro tab is active */}
       <div className={`flex flex-col flex-1 min-h-0 ${activeTab !== 'html' ? 'hidden' : ''}`}>
-        <div className="px-4 py-2 bg-white border-b border-gray-100 flex-shrink-0">
-          <p className="text-sm text-gray-600">
+        <div className="px-4 py-2 bg-white border-b border-gray-100 flex-shrink-0 flex items-center justify-between gap-4">
+          <p className="text-sm text-gray-600 min-w-0">
             トピック別ノードが表示されます（水色：タイトル、点線白：ファクト、濃青：インサイト）・クリックまたはドラッグ範囲選択でコピー
           </p>
+          {onHorizontalScrollChange && (
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap shrink-0">
+              <input
+                type="checkbox"
+                checked={horizontalScroll}
+                onChange={e => onHorizontalScrollChange(e.target.checked)}
+                className="w-3.5 h-3.5 cursor-pointer"
+              />
+              横スクロール
+            </label>
+          )}
         </div>
 
         {dragRect && (
