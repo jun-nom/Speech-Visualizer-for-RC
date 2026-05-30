@@ -15,13 +15,14 @@ interface SpeechFlowCanvasProps {
   onVenueUrlChange: (url: string) => void;
   venueIframeSrc: string;
   onVenueGo: () => void;
+  onVenueDisconnect: () => void;
   venueEnabled: boolean;
   onVenueEnabledChange: (enabled: boolean) => void;
   venueError?: string;
   activeTab: 'html' | 'miro' | 'venue';
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, venueEnabled, onVenueEnabledChange, venueError, activeTab }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, onVenueDisconnect, venueEnabled, onVenueEnabledChange, venueError, activeTab }: SpeechFlowCanvasProps) {
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -258,13 +259,18 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
             placeholder="https://miro.com/app/board/..."
             className="flex-1 text-xs border border-gray-300 rounded px-2 h-7 min-w-0"
           />
-          <Button size="sm" onClick={onVenueGo} className="shrink-0 h-7 px-3 text-xs">GO</Button>
-          <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap cursor-pointer">
+          {venueIframeSrc ? (
+            <Button size="sm" variant="outline" onClick={onVenueDisconnect} className="shrink-0 h-7 px-3 text-xs">Disconnect</Button>
+          ) : (
+            <Button size="sm" onClick={onVenueGo} className="shrink-0 h-7 px-3 text-xs">Connect</Button>
+          )}
+          <label className={`flex items-center gap-1 text-xs whitespace-nowrap ${venueIframeSrc ? 'text-gray-600 cursor-pointer' : 'text-gray-400 cursor-not-allowed'}`}>
             <input
               type="checkbox"
               checked={venueEnabled}
               onChange={e => onVenueEnabledChange(e.target.checked)}
-              className="cursor-pointer"
+              disabled={!venueIframeSrc}
+              className={venueIframeSrc ? 'cursor-pointer' : 'cursor-not-allowed'}
             />
             ノードを置く
           </label>
@@ -283,7 +289,7 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
             {venueError ? (
               <p className="text-sm text-red-500 text-center">{venueError}</p>
             ) : (
-              <p className="text-sm text-gray-400">URLを入力してGOを押してください</p>
+              <p className="text-sm text-gray-400">URLを入力してConnectを押してください</p>
             )}
           </div>
         )}

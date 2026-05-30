@@ -623,7 +623,7 @@ export default function App() {
       toast.success('スピーチフローに追加しました');
 
       // メインMiroボードに非同期でシェイプを追加
-      syncNodesToMiro(newNodes, MIRO_BOARD_ID, miroShapeHistoryRef.current, 0, 0, false, 'Miroシェイプ').then(({ success, lastShapeId }) => {
+      syncNodesToMiro(newNodes, MIRO_BOARD_ID, miroShapeHistoryRef.current, 0, 0, false, 'Miroカード置き場').then(({ success, lastShapeId }) => {
         if (success && lastShapeId) {
           miroShapeHistoryRef.current = [lastShapeId, ...miroShapeHistoryRef.current].slice(0, 50);
         }
@@ -795,7 +795,7 @@ export default function App() {
                       : 'border-transparent text-gray-400 hover:text-gray-600'
                   }`}
                 >
-                  {tab === 'html' ? 'HTMLオブジェクト' : tab === 'miro' ? 'Miroシェイプ' : 'Miro会場'}
+                  {tab === 'html' ? 'HTMLオブジェクト' : tab === 'miro' ? 'Miroカード置き場' : 'Miro会場'}
                 </button>
               ))}
             </div>
