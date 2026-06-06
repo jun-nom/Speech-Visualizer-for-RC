@@ -11,6 +11,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { LogViewer } from './components/LogViewer';
 import { TranscriptionButton } from './components/TranscriptionButton';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
 
 export interface FlowNode {
   id: string;
@@ -231,7 +232,7 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
   let newLastShapeId: string | undefined;
   let firstError = '';
   for (let col = 0; col < topicOrder.length; col++) {
-    let y = startY;
+    let y = startY - 160;
     for (const node of grouped[topicOrder[col]]) {
       const minH = node.type === 'title' ? 160 : 200;
       const height = miroEstimateHeight(node.content, minH);
@@ -312,9 +313,12 @@ export default function App() {
     typeof window !== 'undefined' ? localStorage.getItem('miro-venue-url') || '' : ''
   );
   const [venueIframeSrc, setVenueIframeSrc] = useState('');
-  const [venueEnabled, setVenueEnabled] = useState(false);
   const [venueError, setVenueError] = useState('');
-  const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('html');
+  const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('venue');
+  const venueEnabled = activeTab === 'venue' && !!venueIframeSrc;
+  const [venueConnectDialogOpen, setVenueConnectDialogOpen] = useState(false);
+  const [pendingAddArgs, setPendingAddArgs] = useState<{ text: string; informationLevel: InformationLevel } | null>(null);
+  const [venueDialogUrl, setVenueDialogUrl] = useState('');
 
   const [informationLevel, setInformationLevel] = useState<InformationLevel>(() => {
     if (typeof window !== 'undefined') {
@@ -538,6 +542,55 @@ export default function App() {
       setIsLoadingSessions(false);
     }
   }, []);
+
+  const handleVenueGo = async (url: string) => {
+    setVenueError('');
+    const boardId = extractMiroBoardId(url);
+    if (boardId) {
+      setVenueUrl(url);
+      localStorage.setItem('miro-venue-url', url);
+      setVenueIframeSrc(`https://miro.com/app/live-embed/${boardId}/`);
+      return;
+    }
+    if (!url.startsWith('http')) return;
+    try {
+      const res = await fetch('/api/find-miro-iframe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) { setVenueError('ページの取得に失敗しました'); return; }
+      const data = await res.json() as { miroUrls?: string[]; error?: string };
+      if (data.miroUrls && data.miroUrls.length > 0) {
+        const foundUrl = data.miroUrls[0];
+        const foundBoardId = extractMiroBoardId(foundUrl);
+        if (foundBoardId) {
+          setVenueUrl(foundUrl);
+          localStorage.setItem('miro-venue-url', foundUrl);
+          setVenueIframeSrc(`https://miro.com/app/live-embed/${foundBoardId}/`);
+          toast.success('MiroボードのURLを検出しました');
+          return;
+        }
+      }
+      setVenueError(data.error ? `取得エラー: ${data.error}` : 'このURLはMiroでありません');
+    } catch {
+      setVenueError('ページの取得に失敗しました');
+    }
+  };
+
+  const handleSubmitWithVenueCheck = (text: string, informationLevel: InformationLevel) => {
+    if (activeTab !== 'venue') {
+      handleAddToFlow(text, informationLevel);
+      return;
+    }
+    if (!venueIframeSrc) {
+      setVenueDialogUrl(venueUrl);
+      setPendingAddArgs({ text, informationLevel });
+      setVenueConnectDialogOpen(true);
+      return;
+    }
+    handleAddToFlow(text, informationLevel);
+  };
 
   const handleAddToFlow = async (text: string, informationLevel: InformationLevel) => {
     if (!text.trim() || !activeSession || isProcessing) return;
@@ -785,7 +838,7 @@ export default function App() {
           <div className="flex items-center gap-0 min-w-0 overflow-hidden h-full">
             <h1 className="text-xl whitespace-nowrap shrink-0 mr-4">スピーチフロー可視化ツール</h1>
             <div className="flex h-full items-stretch">
-              {(['html', 'miro', 'venue'] as const).map(tab => (
+              {(['venue', 'miro', 'html'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -883,50 +936,8 @@ export default function App() {
                   setVenueError('');
                 }}
                 venueIframeSrc={venueIframeSrc}
-                onVenueGo={async () => {
-                  setVenueError('');
-                  const boardId = extractMiroBoardId(venueUrl);
-                  if (boardId) {
-                    setVenueIframeSrc(`https://miro.com/app/live-embed/${boardId}/`);
-                    return;
-                  }
-                  if (!venueUrl.startsWith('http')) return;
-                  // 非MiroのURL → HTMLを取得してMiro iframeを探す
-                  try {
-                    const res = await fetch('/api/find-miro-iframe', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ url: venueUrl }),
-                    });
-                    if (!res.ok) { setVenueError('ページの取得に失敗しました'); return; }
-                    const data = await res.json() as { miroUrls?: string[]; error?: string };
-                    if (data.miroUrls && data.miroUrls.length > 0) {
-                      const foundUrl = data.miroUrls[0];
-                      const foundBoardId = extractMiroBoardId(foundUrl);
-                      if (foundBoardId) {
-                        setVenueUrl(foundUrl);
-                        localStorage.setItem('miro-venue-url', foundUrl);
-                        setVenueIframeSrc(`https://miro.com/app/live-embed/${foundBoardId}/`);
-                        toast.success('MiroボードのURLを検出しました');
-                        return;
-                      }
-                    }
-                    setVenueError(data.error
-                      ? `取得エラー: ${data.error}`
-                      : 'このURLはMiroでありません');
-                  } catch {
-                    setVenueError('ページの取得に失敗しました');
-                  }
-                }}
-                onVenueDisconnect={() => {
-                  setVenueIframeSrc('');
-                  setVenueEnabled(false);
-                }}
-                venueEnabled={venueEnabled}
-                onVenueEnabledChange={(enabled) => {
-                  setVenueEnabled(enabled);
-                  localStorage.setItem('miro-venue-enabled', String(enabled));
-                }}
+                onVenueGo={() => handleVenueGo(venueUrl)}
+                onVenueDisconnect={() => setVenueIframeSrc('')}
                 venueError={venueError}
                 activeTab={activeTab}
               />
@@ -938,7 +949,7 @@ export default function App() {
             <TextInputForm
               value={currentInput + interimTranscript}
               onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
-              onSubmit={handleAddToFlow}
+              onSubmit={handleSubmitWithVenueCheck}
               inputHistory={inputHistory}
               informationLevel={informationLevel}
               onInformationLevelChange={handleInformationLevelChange}
@@ -968,7 +979,44 @@ export default function App() {
         )}
       </div>
 
-      <Toaster />
+      {/* Venue: Miro未接続ダイアログ */}
+      <Dialog open={venueConnectDialogOpen} onOpenChange={setVenueConnectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Miroに接続していません</DialogTitle>
+            <DialogDescription>
+              Miro会場のURLを入力してConnectしてください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 py-2">
+            <input
+              type="text"
+              value={venueDialogUrl}
+              onChange={e => setVenueDialogUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (async () => {
+                await handleVenueGo(venueDialogUrl);
+                setVenueConnectDialogOpen(false);
+                setPendingAddArgs(null);
+              })()}
+              placeholder="https://miro.com/app/board/..."
+              className="flex-1 text-sm border border-gray-300 rounded px-3 h-9 min-w-0"
+            />
+            <Button
+              onClick={async () => {
+                await handleVenueGo(venueDialogUrl);
+                setVenueConnectDialogOpen(false);
+                setPendingAddArgs(null);
+              }}
+              className="shrink-0"
+            >
+              Connect
+            </Button>
+          </div>
+          {venueError && <p className="text-sm text-red-500">{venueError}</p>}
+        </DialogContent>
+      </Dialog>
+
+<Toaster />
     </div>
   );
 }

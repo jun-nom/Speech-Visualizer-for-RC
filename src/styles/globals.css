@@ -187,3 +187,12 @@
 html {
   font-size: var(--font-size);
 }
+
+@keyframes venue-url-blink {
+  0%, 100% { background-color: #ffffff; }
+  50%       { background-color: #f0f0f2; }
+}
+
+.venue-url-blink {
+  animation: venue-url-blink 2.4s ease-in-out infinite;
+}

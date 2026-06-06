@@ -17,13 +17,11 @@ interface SpeechFlowCanvasProps {
   venueIframeSrc: string;
   onVenueGo: () => void;
   onVenueDisconnect: () => void;
-  venueEnabled: boolean;
-  onVenueEnabledChange: (enabled: boolean) => void;
   venueError?: string;
   activeTab: 'html' | 'miro' | 'venue';
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, onHorizontalScrollChange, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, onVenueDisconnect, venueEnabled, onVenueEnabledChange, venueError, activeTab }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, onHorizontalScrollChange, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, onVenueDisconnect, venueError, activeTab }: SpeechFlowCanvasProps) {
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -262,31 +260,30 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
 
       {/* Miro会場 tab */}
       <div className={`flex flex-col flex-1 min-h-0 ${activeTab !== 'venue' ? 'hidden' : ''}`}>
-        <div className="px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0 flex items-center gap-2">
-          <input
-            type="text"
-            value={venueUrl}
-            onChange={e => onVenueUrlChange(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && onVenueGo()}
-            placeholder="https://miro.com/app/board/..."
-            className="flex-1 text-xs border border-gray-300 rounded px-2 h-7 min-w-0"
-          />
-          {venueIframeSrc ? (
-            <Button size="sm" variant="outline" onClick={onVenueDisconnect} className="shrink-0 h-7 px-3 text-xs">Disconnect</Button>
-          ) : (
-            <Button size="sm" onClick={onVenueGo} className="shrink-0 h-7 px-3 text-xs">Connect</Button>
-          )}
-          <label className={`flex items-center gap-1 text-xs whitespace-nowrap ${venueIframeSrc ? 'text-gray-600 cursor-pointer' : 'text-gray-400 cursor-not-allowed'}`}>
-            <input
-              type="checkbox"
-              checked={venueEnabled}
-              onChange={e => onVenueEnabledChange(e.target.checked)}
-              disabled={!venueIframeSrc}
-              className={venueIframeSrc ? 'cursor-pointer' : 'cursor-not-allowed'}
-            />
-            ノードを置く
-          </label>
-        </div>
+        {(() => {
+          const unconnected = !venueIframeSrc;
+          const barH = unconnected ? 'py-3' : 'py-2';
+          const inputH = unconnected ? 'h-14 text-xl' : 'h-7 text-xs';
+          const btnH = unconnected ? 'h-14 px-4 text-xl' : 'h-7 px-3 text-xs';
+          const blinkClass = unconnected ? 'venue-url-blink' : '';
+          return (
+            <div className={`px-3 ${barH} bg-white border-b border-gray-100 flex-shrink-0 flex items-center gap-2`}>
+              <input
+                type="text"
+                value={venueUrl}
+                onChange={e => onVenueUrlChange(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && onVenueGo()}
+                placeholder="https://miro.com/app/board/..."
+                className={`flex-1 border border-gray-300 rounded px-2 min-w-0 ${inputH} ${blinkClass}`}
+              />
+              {venueIframeSrc ? (
+                <Button size="sm" variant="outline" onClick={onVenueDisconnect} className={`shrink-0 ${btnH}`}>Disconnect</Button>
+              ) : (
+                <Button size="sm" onClick={onVenueGo} className={`shrink-0 ${btnH}`}>Connect</Button>
+              )}
+            </div>
+          );
+        })()}
         {venueIframeSrc ? (
           <iframe
             src={venueIframeSrc}
@@ -341,7 +338,7 @@ function FlowNode({ node, onCopy, wasDragging }: FlowNodeProps) {
       case 'fact':
         return 'bg-white border-2 border-dashed border-blue-400 text-gray-900';
       case 'insight':
-        return 'bg-[#3640A5] border-[#3640A5] text-white';
+        return 'bg-[#3640A5] text-white ring-2 ring-white';
       default:
         return 'bg-white border-gray-200 text-gray-900';
     }
