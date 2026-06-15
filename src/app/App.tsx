@@ -10,6 +10,8 @@ import * as api from './utils/api';
 import { SettingsDialog } from './components/SettingsDialog';
 import { LogViewer } from './components/LogViewer';
 import { TranscriptionButton } from './components/TranscriptionButton';
+import { ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
+import { DictionaryDialog } from './components/DictionaryDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './components/ui/dialog';
 
@@ -297,7 +299,9 @@ export default function App() {
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [supabaseStatus, setSupabaseStatus] = useState<api.SupabaseStatus | null>(null);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
+  const [isDictionaryOpen, setIsDictionaryOpen] = useState(false);
   const [showPanels, setShowPanels] = useState(true);
+  const [isInputCollapsed, setIsInputCollapsed] = useState(false);
   const [horizontalScroll, setHorizontalScroll] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('speechflow-horizontal-scroll') === 'true';
@@ -861,6 +865,9 @@ export default function App() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            <Button variant="ghost" size="icon" onClick={() => setIsDictionaryOpen(true)} className="text-gray-500" title="用語辞書">
+              <BookOpen className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => setIsLogViewerOpen(true)} className="text-sm text-gray-500">
               ログ
             </Button>
@@ -891,6 +898,7 @@ export default function App() {
         </div>
       </header>
 
+      <DictionaryDialog open={isDictionaryOpen} onClose={() => setIsDictionaryOpen(false)} />
       <LogViewer
         isOpen={isLogViewerOpen}
         onClose={() => setIsLogViewerOpen(false)}
@@ -945,22 +953,43 @@ export default function App() {
           )}
 
           {/* Input Form */}
-          <div className={`speech-flow-input-section bg-white p-6 ${isViewingOtherUserSession ? 'flex-1' : ''}`}>
-            <TextInputForm
-              value={currentInput + interimTranscript}
-              onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
-              onSubmit={handleSubmitWithVenueCheck}
-              inputHistory={inputHistory}
-              informationLevel={informationLevel}
-              onInformationLevelChange={handleInformationLevelChange}
-              nodeQuantity={nodeQuantity}
-              onNodeQuantityChange={handleNodeQuantityChange}
-              textDensity={textDensity}
-              onTextDensityChange={handleTextDensityChange}
-              isProcessing={isProcessing}
-              isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}
-              userRole={isViewingOtherUserSession ? 'viewer' : null}
-            />
+          <div className={`speech-flow-input-section bg-white ${isViewingOtherUserSession ? 'flex-1' : ''}`}>
+            {isInputCollapsed ? (
+              <div className="relative h-14 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setIsInputCollapsed(false)}
+                  className="absolute top-1 right-3 p-2 text-gray-500 bg-gray-100 hover:bg-gray-200 hover:text-gray-700 rounded z-10"
+                >
+                  <ChevronUp className="h-5 w-5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative p-6">
+                <button
+                  type="button"
+                  onClick={() => setIsInputCollapsed(true)}
+                  className="absolute top-3 right-3 p-2 text-gray-500 bg-gray-100 hover:bg-gray-200 hover:text-gray-700 rounded z-10"
+                >
+                  <ChevronDown className="h-5 w-5" />
+                </button>
+                <TextInputForm
+                  value={currentInput + interimTranscript}
+                  onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
+                  onSubmit={handleSubmitWithVenueCheck}
+                  inputHistory={inputHistory}
+                  informationLevel={informationLevel}
+                  onInformationLevelChange={handleInformationLevelChange}
+                  nodeQuantity={nodeQuantity}
+                  onNodeQuantityChange={handleNodeQuantityChange}
+                  textDensity={textDensity}
+                  onTextDensityChange={handleTextDensityChange}
+                  isProcessing={isProcessing}
+                  isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}
+                  userRole={isViewingOtherUserSession ? 'viewer' : null}
+                />
+              </div>
+            )}
           </div>
         </div>
 

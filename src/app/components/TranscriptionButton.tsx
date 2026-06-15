@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from './ui/button';
 import { Mic, StopCircle } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { loadDictionaryTerms } from './DictionaryDialog';
 
 interface TranscriptionButtonProps {
   deepgramApiKey: string;
@@ -67,12 +68,14 @@ export function TranscriptionButton({ deepgramApiKey, onTranscript, onInterimTra
     const captureCanvas = document.createElement('canvas');
     captureCanvas.width = 640;
     captureCanvas.height = 360;
-    const captureCtx = captureCanvas.getContext('2d')!;
+    const captureCtx = captureCanvas.getContext('2d');
 
     const diffCanvas = document.createElement('canvas');
     diffCanvas.width = 64;
     diffCanvas.height = 36;
-    const diffCtx = diffCanvas.getContext('2d')!;
+    const diffCtx = diffCanvas.getContext('2d');
+
+    if (!captureCtx || !diffCtx) return;
 
     const captureFrame = () => {
       const vid = videoElRef.current;
@@ -125,6 +128,7 @@ export function TranscriptionButton({ deepgramApiKey, onTranscript, onInterimTra
         punctuate: 'true',
         endpointing: '300',
       });
+      loadDictionaryTerms().forEach(term => params.append("keywords", term));
 
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?${params}`,

@@ -54,6 +54,7 @@ export function SettingsDialog({
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(10000),
       });
 
       if (response.ok) {
@@ -65,7 +66,8 @@ export function SettingsDialog({
       }
     } catch (error) {
       setOpenaiStatus('invalid');
-      toast.error('OpenAI API接続エラー');
+      const isTimeout = error instanceof Error && error.name === 'TimeoutError';
+      toast.error(isTimeout ? 'OpenAI API接続タイムアウト' : 'OpenAI API接続エラー');
     }
   };
 
@@ -77,10 +79,17 @@ export function SettingsDialog({
 
     setDeepgramStatus('checking');
 
-    const ws = new WebSocket(
-      'wss://api.deepgram.com/v1/listen',
-      ['token', apiKey]
-    );
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(
+        'wss://api.deepgram.com/v1/listen',
+        ['token', apiKey]
+      );
+    } catch {
+      setDeepgramStatus('invalid');
+      toast.error('Deepgram APIキーが無効です');
+      return;
+    }
 
     const timer = setTimeout(() => {
       ws.close();

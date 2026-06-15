@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -41,6 +41,26 @@ export function TextInputForm({
   userRole = null
 }: TextInputFormProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [canRestore, setCanRestore] = useState(false);
+  const clearedTextRef = useRef<string | null>(null);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { valueRef.current = value; }, [value]);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  useEffect(() => {
+    const handleUndo = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && clearedTextRef.current !== null) {
+        e.preventDefault();
+        e.stopPropagation();
+        onChangeRef.current(clearedTextRef.current + valueRef.current);
+        clearedTextRef.current = null;
+        setCanRestore(false);
+      }
+    };
+    document.addEventListener('keydown', handleUndo, true);
+    return () => document.removeEventListener('keydown', handleUndo, true);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +75,22 @@ export function TextInputForm({
       if (value.trim()) {
         onSubmit(value, informationLevel);
       }
+    }
+  };
+
+  const handleClear = () => {
+    if (value.trim()) {
+      clearedTextRef.current = value;
+      onChange('');
+      setCanRestore(true);
+    }
+  };
+
+  const handleRestore = () => {
+    if (clearedTextRef.current !== null) {
+      onChange(clearedTextRef.current + valueRef.current);
+      clearedTextRef.current = null;
+      setCanRestore(false);
     }
   };
 
@@ -196,15 +232,20 @@ export function TextInputForm({
                 <SelectItem value="low">テキスト量：少</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={canRestore ? handleRestore : handleClear}
+              disabled={(!canRestore && !value.trim()) || inputDisabled}
+              className="text-xs h-8 px-3"
+            >
+              {canRestore ? '復元' : 'Clear'}
+            </Button>
           </div>
         </div>
       )}
 
-      {userRole !== 'viewer' && (
-        <p className="text-sm text-gray-600">
-          スピーチ内容を入力してフローに追加できます
-        </p>
-      )}
 
       {/* Input Form - Only show for non-viewers */}
       {userRole !== 'viewer' && (
@@ -225,15 +266,14 @@ export function TextInputForm({
       )}
 
       {/* Input History */}
-      {inputHistory.length > 0 && (
-        <div className="input-history">
+      <div className="input-history">
           <button
             type="button"
             onClick={() => setIsHistoryOpen(prev => !prev)}
             className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900"
           >
-            {isHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             入力履歴（{inputHistory.length}件）
+            {isHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           {isHistoryOpen && (
             <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
@@ -261,7 +301,6 @@ export function TextInputForm({
             </div>
           )}
         </div>
-      )}
     </div>
   );
 }
