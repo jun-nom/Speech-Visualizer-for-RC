@@ -163,6 +163,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('none');
   const [importCount, setImportCount] = useState<number | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const isSavingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -281,9 +282,9 @@ export function DictionaryDialog({ open, onClose }: Props) {
       const q = filter.trim().toLowerCase();
       list = list.filter(e => e.term.toLowerCase().includes(q) || e.reading.toLowerCase().includes(q));
     }
-    if (sortOrder === 'term') {
+    if (!focusedId && sortOrder === 'term') {
       list = [...list].sort((a, b) => a.term.localeCompare(b.term, 'ja'));
-    } else if (sortOrder === 'reading') {
+    } else if (!focusedId && sortOrder === 'reading') {
       list = [...list].sort((a, b) => a.reading.localeCompare(b.reading, 'ja'));
     }
     return list;
@@ -370,7 +371,8 @@ export function DictionaryDialog({ open, onClose }: Props) {
                       type="text"
                       value={entry.term}
                       onChange={e => handleChange(entry.id, 'term', e.target.value)}
-                      onBlur={e => handleTermBlur(entry.id, e.target.value, entry.reading)}
+                      onFocus={() => setFocusedId(entry.id)}
+                      onBlur={e => { setFocusedId(null); handleTermBlur(entry.id, e.target.value, entry.reading); }}
                       placeholder="社名・人名など"
                       className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
                     />
@@ -378,6 +380,8 @@ export function DictionaryDialog({ open, onClose }: Props) {
                       type="text"
                       value={entry.reading}
                       onChange={e => handleChange(entry.id, 'reading', e.target.value)}
+                      onFocus={() => setFocusedId(entry.id)}
+                      onBlur={() => setFocusedId(null)}
                       disabled={isGenerating}
                       placeholder={isGenerating ? '生成中...' : '例：みくしぃ'}
                       className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
