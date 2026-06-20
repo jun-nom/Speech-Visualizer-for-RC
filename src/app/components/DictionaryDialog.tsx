@@ -329,7 +329,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !isSavingRef.current) { setSaveError(false); onClose(); } }}>
-      <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
+      <DialogContent className="max-w-[63rem] h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>用語辞書（共有）</DialogTitle>
         </DialogHeader>
