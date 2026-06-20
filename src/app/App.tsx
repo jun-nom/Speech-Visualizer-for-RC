@@ -297,7 +297,7 @@ export default function App() {
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
-  const [supabaseStatus, setSupabaseStatus] = useState<api.SupabaseStatus | null>(null);
+  const [serverError, setServerError] = useState(false);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
   const [isDictionaryOpen, setIsDictionaryOpen] = useState(false);
   const [showPanels, setShowPanels] = useState(true);
@@ -467,16 +467,11 @@ export default function App() {
     return [];
   };
 
-  // Supabase health check on mount
-  useEffect(() => {
-    api.checkSupabaseHealth().then(setSupabaseStatus);
-  }, []);
-
-  const saveToSupabase = (session: Session) => {
-    if (supabaseStatus === 'quota_exceeded' || supabaseStatus === 'error') return;
-    api.saveSessionToSupabase(session).catch((err: any) => {
-      if (err?.isQuotaExceeded) setSupabaseStatus('quota_exceeded');
-      console.warn('Supabase save failed:', err);
+  const saveToServer = (session: Session) => {
+    if (serverError) return;
+    api.saveSession(session).catch((err: any) => {
+      console.warn('Server save failed:', err);
+      setServerError(true);
     });
   };
 
@@ -507,7 +502,7 @@ export default function App() {
       setCurrentInput('');
       setFeedback({ comments: [], questions: [] });
       saveSessionsToLocal(updatedSessions);
-      saveToSupabase(newSession);
+      saveToServer(newSession);
       toast.success('新しいセッションを作成しました');
     } catch (error) {
       toast.error('セッション作成中にエラーが発生しました');
@@ -516,35 +511,39 @@ export default function App() {
     }
   };
 
-  // Load sessions on app start
+  // Load sessions on app start (from server, fallback to localStorage)
   useEffect(() => {
     setIsLoadingSessions(true);
-    try {
-      const loadedSessions = loadSessionsFromLocal().filter(s => s.inputs.length > 0);
-
-      if (loadedSessions.length > 0) {
-        const userSessions = loadedSessions
+    const applySessionsOrCreate = (loadedSessions: Session[]) => {
+      const filtered = loadedSessions.filter(s => s.inputs.length > 0);
+      if (filtered.length > 0) {
+        const userSessions = filtered
           .filter(s => s.createdBy === currentUserId)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
         if (userSessions.length > 0) {
           const newestSession = userSessions[0];
-          const withActive = loadedSessions.map(s => ({ ...s, isActive: s.id === newestSession.id }));
+          const withActive = filtered.map(s => ({ ...s, isActive: s.id === newestSession.id }));
           setSessions(withActive);
           setInputHistory(newestSession.inputs || []);
         } else {
-          setSessions(loadedSessions);
+          setSessions(filtered);
           createNewSession();
         }
       } else {
         createNewSession();
       }
-    } catch (error) {
-      console.error('Failed to load initial data:', error);
-      createNewSession();
-    } finally {
-      setIsLoadingSessions(false);
-    }
+    };
+
+    api.loadAllSessions()
+      .then(serverSessions => {
+        saveSessionsToLocal(serverSessions);
+        applySessionsOrCreate(serverSessions);
+      })
+      .catch(() => {
+        setServerError(true);
+        applySessionsOrCreate(loadSessionsFromLocal());
+      })
+      .finally(() => setIsLoadingSessions(false));
   }, []);
 
   const handleVenueGo = async (url: string) => {
@@ -651,7 +650,7 @@ export default function App() {
       setSessions(updatedSessionsWithNodes);
       saveSessionsToLocal(updatedSessionsWithNodes);
       const savedSession = updatedSessionsWithNodes.find(s => s.isActive);
-      if (savedSession) saveToSupabase(savedSession);
+      if (savedSession) saveToServer(savedSession);
 
       // バックグラウンドで固有名詞を映像フレームと照合・補正
       const frameForCorrection = latestFrameRef.current;
@@ -773,6 +772,7 @@ export default function App() {
     setSessions(updatedSessions);
     saveSessionsToLocal(updatedSessions);
     setFeedback({ comments: [], questions: [] });
+    api.deleteSession(sessionId).catch(err => console.warn('Server delete failed:', err));
     toast.success('セッションを削除しました');
   };
 
@@ -802,6 +802,7 @@ export default function App() {
     setSessions(updatedSessions);
     saveSessionsToLocal(updatedSessions);
     setFeedback({ comments: [], questions: [] });
+    sessionIds.forEach(id => api.deleteSession(id).catch(err => console.warn('Server delete failed:', err)));
     toast.success(`${sessionIds.length}件のセッションを削除しました`);
   };
 
@@ -856,11 +857,9 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {(supabaseStatus === 'quota_exceeded' || supabaseStatus === 'error') && (
+            {serverError && (
               <span className="text-xs text-amber-600 truncate min-w-0">
-                {supabaseStatus === 'quota_exceeded'
-                  ? 'Supabaseのデータ転送量超過。データはローカルに保存されます。'
-                  : 'Supabaseに接続できません。データはローカルに保存されます。'}
+                サーバーに接続できません。データはローカルに保存されます。
               </span>
             )}
           </div>
@@ -902,8 +901,6 @@ export default function App() {
       <LogViewer
         isOpen={isLogViewerOpen}
         onClose={() => setIsLogViewerOpen(false)}
-        supabaseStatus={supabaseStatus}
-        onSupabaseStatusChange={setSupabaseStatus}
       />
 
       <div className="speech-flow-main flex h-[calc(100vh-56px)]">

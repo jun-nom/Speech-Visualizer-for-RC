@@ -73,6 +73,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/dictionary': 'https://speech-visualizer-for-rc.pages.dev',
+      '/api/sessions': 'https://speech-visualizer-for-rc.pages.dev',
     },
   },
 })

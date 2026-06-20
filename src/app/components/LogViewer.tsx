@@ -9,14 +9,11 @@ import { ChevronDown, ChevronRight, Trash2, RefreshCw } from 'lucide-react';
 interface LogViewerProps {
   isOpen: boolean;
   onClose: () => void;
-  supabaseStatus: api.SupabaseStatus | null;
-  onSupabaseStatusChange: (status: api.SupabaseStatus) => void;
 }
 
-export function LogViewer({ isOpen, onClose, supabaseStatus, onSupabaseStatusChange }: LogViewerProps) {
+export function LogViewer({ isOpen, onClose }: LogViewerProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCleaning, setIsCleaning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -24,15 +21,10 @@ export function LogViewer({ isOpen, onClose, supabaseStatus, onSupabaseStatusCha
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.loadAllSessionsFromSupabase();
+      const data = await api.loadAllSessions();
       setSessions(data.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
-    } catch (err: any) {
-      if (err?.isQuotaExceeded) {
-        onSupabaseStatusChange('quota_exceeded');
-        setError('Supabaseのデータ転送量超過のため読み込めません。');
-      } else {
-        setError('ログの読み込みに失敗しました。');
-      }
+    } catch {
+      setError('ログの読み込みに失敗しました。');
     } finally {
       setIsLoading(false);
     }
@@ -42,27 +34,12 @@ export function LogViewer({ isOpen, onClose, supabaseStatus, onSupabaseStatusCha
     if (isOpen) loadSessions();
   }, [isOpen]);
 
-  const handleCleanup = async () => {
-    setIsCleaning(true);
-    try {
-      const result = await api.cleanupDummySessions();
-      toast.success(`${result.deletedCount}件の空セッションを削除しました`);
-      await loadSessions();
-    } catch (err: any) {
-      if (err?.isQuotaExceeded) onSupabaseStatusChange('quota_exceeded');
-      toast.error('クリーンアップに失敗しました');
-    } finally {
-      setIsCleaning(false);
-    }
-  };
-
   const handleDelete = async (sessionId: string) => {
     try {
-      await api.deleteSessionFromSupabase(sessionId);
+      await api.deleteSession(sessionId);
       setSessions(prev => prev.filter(s => s.id !== sessionId));
       toast.success('ログを削除しました');
-    } catch (err: any) {
-      if (err?.isQuotaExceeded) onSupabaseStatusChange('quota_exceeded');
+    } catch {
       toast.error('削除に失敗しました');
     }
   };
@@ -86,15 +63,10 @@ export function LogViewer({ isOpen, onClose, supabaseStatus, onSupabaseStatusCha
           <span className="text-sm text-gray-500">
             {isLoading ? '読み込み中...' : `${sessions.length}件のセッション`}
           </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={loadSessions} disabled={isLoading}>
-              <RefreshCw className="w-3 h-3 mr-1" />
-              更新
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleCleanup} disabled={isCleaning || isLoading}>
-              クリーンアップ
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={loadSessions} disabled={isLoading}>
+            <RefreshCw className="w-3 h-3 mr-1" />
+            更新
+          </Button>
         </div>
 
         {error && (
