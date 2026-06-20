@@ -7,15 +7,18 @@ const TERM_COUNT = 100;
 const DEFAULT_TERMS = ['カミナシ', 'インフォバーン', 'MIXI', 'Muture', 'GMOメディア'];
 
 export function loadDictionaryTerms(): string[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return DEFAULT_TERMS;
   try {
     const stored = localStorage.getItem(DICTIONARY_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) return (parsed as unknown[]).filter((t): t is string => typeof t === 'string' && t.trim() !== '');
+      if (Array.isArray(parsed)) {
+        const terms = (parsed as unknown[]).filter((t): t is string => typeof t === 'string' && t.trim() !== '');
+        return terms.length > 0 ? terms : DEFAULT_TERMS;
+      }
     }
   } catch { /* ignore */ }
-  return [];
+  return DEFAULT_TERMS;
 }
 
 function loadRawTerms(): string[] {
