@@ -14,9 +14,11 @@ export interface StoredEntry {
 
 interface Entry extends StoredEntry {
   id: string;
+  insertIndex: number; // for restoring "追加した順": negative = newer (sorts to top)
 }
 
-type SortOrder = 'none' | 'term' | 'reading';
+type SortColumn = 'term' | 'reading';
+type SortDir = 'desc' | 'asc';
 
 const DEFAULT_ENTRIES: StoredEntry[] = [
   { term: 'カミナシ', reading: 'かみなし' },
@@ -29,12 +31,21 @@ const DEFAULT_ENTRIES: StoredEntry[] = [
 let _nextId = 0;
 const nextId = () => String(_nextId++);
 
+// New entries get decreasing (negative) insertIndex so they sort before loaded entries
+let _newEntryIdx = -1;
+const nextNewIdx = () => _newEntryIdx--;
+
 function katakanaToHiragana(str: string): string {
   return str.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
 }
 
 function toEntries(stored: StoredEntry[]): Entry[] {
-  return stored.map(e => ({ ...e, reading: katakanaToHiragana(e.reading), id: nextId() }));
+  return stored.map((e, i) => ({
+    ...e,
+    reading: katakanaToHiragana(e.reading),
+    id: nextId(),
+    insertIndex: i, // 0-based, ascending = original server order
+  }));
 }
 
 function normalizeData(data: unknown): StoredEntry[] | null {
@@ -160,7 +171,8 @@ export function DictionaryDialog({ open, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [filter, setFilter] = useState('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('none');
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir | null>(null);
   const [importCount, setImportCount] = useState<number | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const isSavingRef = useRef(false);
@@ -170,7 +182,8 @@ export function DictionaryDialog({ open, onClose }: Props) {
     if (!open) return;
     setSaveError(false);
     setFilter('');
-    setSortOrder('none');
+    setSortColumn(null);
+    setSortDir(null);
     setImportCount(null);
     setLoading(true);
     fetchEntriesFromServer().then(serverEntries => {
@@ -200,6 +213,27 @@ export function DictionaryDialog({ open, onClose }: Props) {
     return () => clearTimeout(timer);
   }, [importCount]);
 
+  const handleHeaderClick = useCallback((col: SortColumn) => {
+    let newCol: SortColumn | null;
+    let newDir: SortDir | null;
+
+    if (sortColumn !== col) {
+      newCol = col; newDir = 'desc';
+    } else if (sortDir === 'desc') {
+      newCol = col; newDir = 'asc';
+    } else {
+      newCol = null; newDir = null; // clear
+    }
+
+    setSortColumn(newCol);
+    setSortDir(newDir);
+    setEntries(prev => [...prev].sort((a, b) => {
+      if (!newCol) return a.insertIndex - b.insertIndex; // restore 追加した順
+      const cmp = a[newCol].localeCompare(b[newCol], 'ja');
+      return newDir === 'desc' ? -cmp : cmp;
+    }));
+  }, [sortColumn, sortDir]);
+
   const handleChange = useCallback((id: string, field: 'term' | 'reading', value: string) => {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
   }, []);
@@ -227,20 +261,10 @@ export function DictionaryDialog({ open, onClose }: Props) {
     setEntries(prev => prev.filter(e => e.id !== id));
   }, []);
 
-  const handleSortOrderChange = useCallback((order: SortOrder) => {
-    setSortOrder(order);
-    if (order === 'none') return;
-    setEntries(prev => [...prev].sort((a, b) =>
-      order === 'term'
-        ? a.term.localeCompare(b.term, 'ja')
-        : a.reading.localeCompare(b.reading, 'ja'),
-    ));
-  }, []);
-
   const handleAdd = useCallback(() => {
     setEntries(prev => {
       if (prev.length >= MAX_ENTRIES) return prev;
-      return [{ id: nextId(), term: '', reading: '' }, ...prev];
+      return [{ id: nextId(), term: '', reading: '', insertIndex: nextNewIdx() }, ...prev];
     });
   }, []);
 
@@ -257,9 +281,9 @@ export function DictionaryDialog({ open, onClose }: Props) {
         const newEntries = imported
           .filter(e => !existingTerms.has(e.term.trim()))
           .slice(0, MAX_ENTRIES - prev.length)
-          .map(e => ({ ...e, id: nextId() }));
+          .map(e => ({ ...e, id: nextId(), insertIndex: nextNewIdx() }));
         setImportCount(newEntries.length);
-        return [...prev, ...newEntries];
+        return [...newEntries, ...prev];
       });
     };
     reader.readAsText(file, 'utf-8');
@@ -278,24 +302,34 @@ export function DictionaryDialog({ open, onClose }: Props) {
     const ok = await saveEntriesToServer(stored);
     setSaving(false);
     isSavingRef.current = false;
-    if (!ok) {
-      setSaveError(true);
-      return;
-    }
+    if (!ok) { setSaveError(true); return; }
     onClose();
   };
 
-  const displayedEntries = (() => {
-    if (!filter.trim()) return entries;
-    const q = filter.trim().toLowerCase();
-    return entries.filter(e => e.term.toLowerCase().includes(q) || e.reading.toLowerCase().includes(q));
-  })();
+  const displayedEntries = filter.trim()
+    ? entries.filter(e => {
+        const q = filter.trim().toLowerCase();
+        return e.term.toLowerCase().includes(q) || e.reading.toLowerCase().includes(q);
+      })
+    : entries;
 
   const filledCount = entries.filter(e => e.term.trim() !== '').length;
 
+  const headerBtn = (col: SortColumn, label: string) => (
+    <button
+      onClick={() => handleHeaderClick(col)}
+      className="flex items-center gap-1 text-xs text-gray-400 font-medium hover:text-gray-600 select-none"
+    >
+      {label}
+      <span className="w-3 text-center">
+        {sortColumn === col ? (sortDir === 'desc' ? '↓' : '↑') : ''}
+      </span>
+    </button>
+  );
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !isSavingRef.current) { setSaveError(false); onClose(); } }}>
-      <DialogContent className="max-w-[63rem] h-[80vh] flex flex-col">
+      <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>用語辞書（共有）</DialogTitle>
         </DialogHeader>
@@ -315,24 +349,13 @@ export function DictionaryDialog({ open, onClose }: Props) {
           </p>
         )}
 
-        {/* Toolbar */}
+        {/* Toolbar: [+追加] [CSV読み込み] [32px gap] [フィルター] */}
         <div className="flex items-center gap-2 mt-2 shrink-0">
-          <input
-            type="text"
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="フィルター..."
-            className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
-          />
-          <select
-            value={sortOrder}
-            onChange={e => handleSortOrderChange(e.target.value as SortOrder)}
-            className="text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400 bg-white"
-          >
-            <option value="none">並び順：デフォルト</option>
-            <option value="term">用語順</option>
-            <option value="reading">読み順</option>
-          </select>
+          {entries.length < MAX_ENTRIES && (
+            <Button variant="outline" size="sm" onClick={handleAdd} className="shrink-0">
+              + 追加
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="shrink-0">
             CSV読み込み
           </Button>
@@ -343,19 +366,19 @@ export function DictionaryDialog({ open, onClose }: Props) {
             onChange={handleCSVImport}
             className="hidden"
           />
+          <input
+            type="text"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="フィルター..."
+            className="flex-1 ml-6 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
+          />
         </div>
-        {entries.length < MAX_ENTRIES && (
-          <div className="shrink-0 mt-1.5">
-            <Button variant="outline" size="sm" onClick={handleAdd}>
-              + 追加
-            </Button>
-          </div>
-        )}
 
-        {/* Column headers */}
-        <div className="flex items-center gap-2 mt-1 shrink-0 px-0.5">
-          <div className="flex-1 text-xs text-gray-400 font-medium">用語</div>
-          <div className="flex-1 text-xs text-gray-400 font-medium">読み（ひらがな・任意）</div>
+        {/* Column headers (clickable for sort) */}
+        <div className="flex items-center gap-2 mt-2 shrink-0 px-0.5">
+          <div className="flex-1">{headerBtn('term', '用語')}</div>
+          <div className="flex-1">{headerBtn('reading', '読み（ひらがな・任意）')}</div>
           <div className="w-7" />
         </div>
 
