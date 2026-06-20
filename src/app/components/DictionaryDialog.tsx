@@ -9,7 +9,10 @@ const DICTIONARY_API = '/api/dictionary';
 
 async function fetchTermsFromServer(): Promise<string[] | null> {
   try {
-    const res = await fetch(DICTIONARY_API, { cache: 'no-store' });
+    const res = await fetch(DICTIONARY_API, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data.terms)) return null;

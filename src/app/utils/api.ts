@@ -3,9 +3,13 @@ import { buildSystemPrompt, TEXT_DENSITY_LIMITS } from './systemPrompt';
 import { loadDictionaryTerms } from '../components/DictionaryDialog';
 
 async function buildTermsInstruction(): Promise<string> {
-  const terms = await loadDictionaryTerms();
-  if (terms.length === 0) return '';
-  return `\n\n以下の用語が含まれる場合は、必ずこの表記で出力してください：\n${terms.map(t => `- ${t}`).join('\n')}`;
+  try {
+    const terms = await loadDictionaryTerms();
+    if (terms.length === 0) return '';
+    return `\n\n以下の用語が含まれる場合は、必ずこの表記で出力してください：\n${terms.map(t => `- ${t}`).join('\n')}`;
+  } catch {
+    return '';
+  }
 }
 
 const SESSIONS_API = '/api/sessions';
@@ -32,7 +36,7 @@ export async function saveSession(session: Session): Promise<void> {
 }
 
 export async function loadAllSessions(): Promise<Session[]> {
-  const res = await fetch(SESSIONS_API, { signal: AbortSignal.timeout(15000) });
+  const res = await fetch(SESSIONS_API, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Load failed: ${res.status}`);
   const data = await res.json();
   return (data as any[]).map(s => ({ ...s, createdAt: new Date(s.createdAt) }));
