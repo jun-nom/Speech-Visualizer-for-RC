@@ -329,7 +329,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !isSavingRef.current) { setSaveError(false); onClose(); } }}>
-      <DialogContent className="sm:max-w-[94.5rem] h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[48rem] h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>用語辞書（共有）</DialogTitle>
         </DialogHeader>
@@ -353,7 +353,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
         <div className="flex items-center gap-2 mt-2 shrink-0">
           {entries.length < MAX_ENTRIES && (
             <Button variant="outline" size="sm" onClick={handleAdd} className="shrink-0">
-              ➕用語を追加
+              ➕ 用語を追加
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="shrink-0">
