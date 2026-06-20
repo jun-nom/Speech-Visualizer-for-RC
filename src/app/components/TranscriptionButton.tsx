@@ -128,7 +128,7 @@ export function TranscriptionButton({ deepgramApiKey, onTranscript, onInterimTra
         punctuate: 'true',
         endpointing: '300',
       });
-      loadDictionaryTerms().forEach(term => params.append("keywords", term));
+      (await loadDictionaryTerms()).forEach(term => params.append("keywords", term));
 
       const ws = new WebSocket(
         `wss://api.deepgram.com/v1/listen?${params}`,
