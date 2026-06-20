@@ -70,4 +70,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src/app'),
     },
   },
+  server: {
+    proxy: {
+      '/api/dictionary': 'https://speech-visualizer-for-rc.pages.dev',
+    },
+  },
 })
