@@ -2,6 +2,11 @@ interface Env {
   DICTIONARY_KV?: KVNamespace;
 }
 
+interface StoredEntry {
+  term: string;
+  reading: string;
+}
+
 const KV_KEY = 'shared_dictionary_terms';
 
 const corsHeaders = {
@@ -10,6 +15,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Cache-Control': 'no-store',
 };
+
+function normalizeStored(data: unknown): StoredEntry[] | null {
+  if (!Array.isArray(data) || data.length === 0) return null;
+  if (typeof data[0] === 'object' && data[0] !== null) {
+    const entries = data.filter(
+      (e): e is StoredEntry =>
+        typeof e === 'object' && e !== null &&
+        typeof (e as StoredEntry).term === 'string' &&
+        (e as StoredEntry).term.trim() !== '',
+    );
+    return entries.length > 0 ? entries : null;
+  }
+  if (typeof data[0] === 'string') {
+    const terms = data.filter((t): t is string => typeof t === 'string' && t.trim() !== '');
+    return terms.length > 0 ? terms.map(t => ({ term: t, reading: '' })) : null;
+  }
+  return null;
+}
 
 export async function onRequest(context: { request: Request; env: Env }) {
   const { request, env } = context;
@@ -24,15 +47,18 @@ export async function onRequest(context: { request: Request; env: Env }) {
 
   if (request.method === 'GET') {
     const stored = await env.DICTIONARY_KV.get(KV_KEY, 'json');
-    return Response.json({ terms: stored ?? null }, { headers: corsHeaders });
+    const entries = normalizeStored(stored);
+    return Response.json({ entries: entries ?? null }, { headers: corsHeaders });
   }
 
   if (request.method === 'POST') {
-    const { terms } = await request.json() as { terms?: unknown };
-    if (!Array.isArray(terms)) {
-      return Response.json({ error: 'terms must be an array' }, { status: 400, headers: corsHeaders });
+    const body = await request.json() as Record<string, unknown>;
+    const raw = 'entries' in body ? body.entries : body.terms;
+    if (!Array.isArray(raw)) {
+      return Response.json({ error: 'entries must be an array' }, { status: 400, headers: corsHeaders });
     }
-    await env.DICTIONARY_KV.put(KV_KEY, JSON.stringify(terms));
+    const entries = normalizeStored(raw);
+    await env.DICTIONARY_KV.put(KV_KEY, JSON.stringify(entries ?? []));
     return Response.json({ success: true }, { headers: corsHeaders });
   }
 
