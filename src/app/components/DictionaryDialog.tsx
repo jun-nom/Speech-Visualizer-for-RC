@@ -5,8 +5,9 @@ import { Button } from './ui/button';
 export const DICTIONARY_STORAGE_KEY = 'speechflow-dictionary-terms';
 const MAX_ENTRIES = 100;
 const DICTIONARY_API = '/api/dictionary';
+const READING_API = '/api/reading';
 
-interface StoredEntry {
+export interface StoredEntry {
   term: string;
   reading: string;
 }
@@ -18,18 +19,22 @@ interface Entry extends StoredEntry {
 type SortOrder = 'none' | 'term' | 'reading';
 
 const DEFAULT_ENTRIES: StoredEntry[] = [
-  { term: 'カミナシ', reading: '' },
-  { term: 'インフォバーン', reading: '' },
-  { term: 'MIXI', reading: 'ミクシィ' },
-  { term: 'Muture', reading: 'ミューチャー' },
-  { term: 'GMOメディア', reading: '' },
+  { term: 'カミナシ', reading: 'かみなし' },
+  { term: 'インフォバーン', reading: 'いんふぉばーん' },
+  { term: 'MIXI', reading: 'みくしぃ' },
+  { term: 'Muture', reading: 'みゅーちゃー' },
+  { term: 'GMOメディア', reading: 'じーえむおーめでぃあ' },
 ];
 
 let _nextId = 0;
 const nextId = () => String(_nextId++);
 
+function katakanaToHiragana(str: string): string {
+  return str.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+}
+
 function toEntries(stored: StoredEntry[]): Entry[] {
-  return stored.map(e => ({ ...e, id: nextId() }));
+  return stored.map(e => ({ ...e, reading: katakanaToHiragana(e.reading), id: nextId() }));
 }
 
 function normalizeData(data: unknown): StoredEntry[] | null {
@@ -79,19 +84,57 @@ async function saveEntriesToServer(entries: StoredEntry[]): Promise<boolean> {
   }
 }
 
+async function generateReading(term: string): Promise<string> {
+  const systemMsg = 'あなたは日本語の専門家です。与えられた用語のひらがな読みのみを返してください。読み仮名以外の文字は一切含めないでください。アルファベットや記号はそのまま読みに変換してください。例：「MIXI」→「みくしぃ」、「富士通」→「ふじつう」';
+  const userMsg = `次の用語のひらがな読みを返してください：${term}`;
+  const localApiKey = typeof window !== 'undefined' ? (localStorage.getItem('speechflow-openai-key') ?? '') : '';
+
+  if (localApiKey) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }],
+        max_tokens: 60,
+        temperature: 0,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error('OpenAI error');
+    const data = await res.json() as { choices: Array<{ message: { content: string } }> };
+    return data.choices[0]?.message?.content?.trim() ?? '';
+  }
+
+  const res = await fetch(READING_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ term }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error('reading API error');
+  const data = await res.json() as { reading: string };
+  return data.reading;
+}
+
 export async function loadDictionaryTerms(): Promise<string[]> {
+  const entries = await loadDictionaryEntries();
+  return entries.map(e => e.term);
+}
+
+export async function loadDictionaryEntries(): Promise<StoredEntry[]> {
   const serverEntries = await fetchEntriesFromServer();
-  if (serverEntries && serverEntries.length > 0) return serverEntries.map(e => e.term);
+  if (serverEntries && serverEntries.length > 0) return serverEntries;
   if (typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem(DICTIONARY_STORAGE_KEY);
       if (stored) {
         const entries = normalizeData(JSON.parse(stored));
-        if (entries && entries.length > 0) return entries.map(e => e.term);
+        if (entries && entries.length > 0) return entries;
       }
     } catch { /* ignore */ }
   }
-  return DEFAULT_ENTRIES.map(e => e.term);
+  return DEFAULT_ENTRIES;
 }
 
 function parseCSV(text: string): StoredEntry[] {
@@ -101,7 +144,7 @@ function parseCSV(text: string): StoredEntry[] {
     .filter(Boolean)
     .map(line => {
       const [term = '', reading = ''] = line.split(',').map(s => s.trim());
-      return { term, reading };
+      return { term, reading: katakanaToHiragana(reading) };
     })
     .filter(e => e.term !== '');
 }
@@ -119,6 +162,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
   const [filter, setFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('none');
   const [importCount, setImportCount] = useState<number | null>(null);
+  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const isSavingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -158,6 +202,25 @@ export function DictionaryDialog({ open, onClose }: Props) {
 
   const handleChange = useCallback((id: string, field: 'term' | 'reading', value: string) => {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  }, []);
+
+  const handleTermBlur = useCallback(async (id: string, term: string, currentReading: string) => {
+    if (!term.trim() || currentReading.trim()) return;
+    setGeneratingIds(prev => new Set([...prev, id]));
+    try {
+      const reading = await generateReading(term.trim());
+      if (reading) {
+        setEntries(prev => prev.map(e =>
+          e.id === id && !e.reading.trim() ? { ...e, reading } : e,
+        ));
+      }
+    } catch { /* silently fail */ } finally {
+      setGeneratingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }, []);
 
   const handleDelete = useCallback((id: string) => {
@@ -272,6 +335,11 @@ export function DictionaryDialog({ open, onClose }: Props) {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="shrink-0">
             CSV読み込み
           </Button>
+          {entries.length < MAX_ENTRIES && (
+            <Button variant="outline" size="sm" onClick={handleAdd} className="shrink-0">
+              + 追加
+            </Button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -284,7 +352,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
         {/* Column headers */}
         <div className="flex items-center gap-2 mt-1 shrink-0 px-0.5">
           <div className="flex-1 text-xs text-gray-400 font-medium">用語</div>
-          <div className="flex-1 text-xs text-gray-400 font-medium">読み（カタカナ・任意）</div>
+          <div className="flex-1 text-xs text-gray-400 font-medium">読み（ひらがな・任意）</div>
           <div className="w-7" />
         </div>
 
@@ -294,39 +362,36 @@ export function DictionaryDialog({ open, onClose }: Props) {
             <p className="text-sm text-gray-400 text-center py-8">読み込み中...</p>
           ) : (
             <div className="flex flex-col gap-1.5">
-              {displayedEntries.map(entry => (
-                <div key={entry.id} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={entry.term}
-                    onChange={e => handleChange(entry.id, 'term', e.target.value)}
-                    placeholder="社名・人名など"
-                    className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
-                  />
-                  <input
-                    type="text"
-                    value={entry.reading}
-                    onChange={e => handleChange(entry.id, 'reading', e.target.value)}
-                    placeholder="例：ミクシィ"
-                    className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
-                  />
-                  <button
-                    onClick={() => handleDelete(entry.id)}
-                    className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors shrink-0 text-base leading-none"
-                    aria-label="削除"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              {!filter.trim() && entries.length < MAX_ENTRIES && (
-                <button
-                  onClick={handleAdd}
-                  className="mt-1 text-sm text-blue-500 hover:text-blue-700 text-left px-0.5 py-1"
-                >
-                  + 用語を追加
-                </button>
-              )}
+              {displayedEntries.map(entry => {
+                const isGenerating = generatingIds.has(entry.id);
+                return (
+                  <div key={entry.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={entry.term}
+                      onChange={e => handleChange(entry.id, 'term', e.target.value)}
+                      onBlur={e => handleTermBlur(entry.id, e.target.value, entry.reading)}
+                      placeholder="社名・人名など"
+                      className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
+                    />
+                    <input
+                      type="text"
+                      value={entry.reading}
+                      onChange={e => handleChange(entry.id, 'reading', e.target.value)}
+                      disabled={isGenerating}
+                      placeholder={isGenerating ? '生成中...' : '例：みくしぃ'}
+                      className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors shrink-0 text-base leading-none"
+                      aria-label="削除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
               {entries.length >= MAX_ENTRIES && (
                 <p className="text-xs text-gray-400 text-center py-2">最大{MAX_ENTRIES}件に達しました</p>
               )}

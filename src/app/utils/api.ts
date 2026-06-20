@@ -1,12 +1,13 @@
 import { FlowNode, Session } from '../App';
 import { buildSystemPrompt, TEXT_DENSITY_LIMITS } from './systemPrompt';
-import { loadDictionaryTerms } from '../components/DictionaryDialog';
+import { loadDictionaryEntries } from '../components/DictionaryDialog';
 
 async function buildTermsInstruction(): Promise<string> {
   try {
-    const terms = await loadDictionaryTerms();
-    if (terms.length === 0) return '';
-    return `\n\n以下の用語が含まれる場合は、必ずこの表記で出力してください：\n${terms.map(t => `- ${t}`).join('\n')}`;
+    const entries = await loadDictionaryEntries();
+    if (entries.length === 0) return '';
+    const lines = entries.map(({ term, reading }) => reading ? `- ${term}（${reading}）` : `- ${term}`);
+    return `\n\n以下の用語が含まれる場合は、必ずこの表記で出力してください：\n${lines.join('\n')}`;
   } catch {
     return '';
   }
