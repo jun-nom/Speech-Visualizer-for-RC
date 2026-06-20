@@ -163,7 +163,6 @@ export function DictionaryDialog({ open, onClose }: Props) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('none');
   const [importCount, setImportCount] = useState<number | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
-  const [focusedId, setFocusedId] = useState<string | null>(null);
   const isSavingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -228,10 +227,20 @@ export function DictionaryDialog({ open, onClose }: Props) {
     setEntries(prev => prev.filter(e => e.id !== id));
   }, []);
 
+  const handleSortOrderChange = useCallback((order: SortOrder) => {
+    setSortOrder(order);
+    if (order === 'none') return;
+    setEntries(prev => [...prev].sort((a, b) =>
+      order === 'term'
+        ? a.term.localeCompare(b.term, 'ja')
+        : a.reading.localeCompare(b.reading, 'ja'),
+    ));
+  }, []);
+
   const handleAdd = useCallback(() => {
     setEntries(prev => {
       if (prev.length >= MAX_ENTRIES) return prev;
-      return [...prev, { id: nextId(), term: '', reading: '' }];
+      return [{ id: nextId(), term: '', reading: '' }, ...prev];
     });
   }, []);
 
@@ -277,31 +286,22 @@ export function DictionaryDialog({ open, onClose }: Props) {
   };
 
   const displayedEntries = (() => {
-    let list = entries;
-    if (filter.trim()) {
-      const q = filter.trim().toLowerCase();
-      list = list.filter(e => e.term.toLowerCase().includes(q) || e.reading.toLowerCase().includes(q));
-    }
-    if (!focusedId && sortOrder === 'term') {
-      list = [...list].sort((a, b) => a.term.localeCompare(b.term, 'ja'));
-    } else if (!focusedId && sortOrder === 'reading') {
-      list = [...list].sort((a, b) => a.reading.localeCompare(b.reading, 'ja'));
-    }
-    return list;
+    if (!filter.trim()) return entries;
+    const q = filter.trim().toLowerCase();
+    return entries.filter(e => e.term.toLowerCase().includes(q) || e.reading.toLowerCase().includes(q));
   })();
 
   const filledCount = entries.filter(e => e.term.trim() !== '').length;
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v && !isSavingRef.current) { setSaveError(false); onClose(); } }}>
-      <DialogContent className="max-w-2xl h-[80vh] flex flex-col">
+      <DialogContent className="max-w-[63rem] h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>用語辞書（共有）</DialogTitle>
         </DialogHeader>
 
         <p className="text-sm text-gray-500 shrink-0">
-          正しく書き起こしたい社名・人名などを登録してください。DeepgramとOpenAIの両方に反映されます（最大{MAX_ENTRIES}件）。<br />
-          <span className="text-blue-500">登録した内容はすべてのユーザーで共有されます。</span>
+          正しく書き起こしたい社名・人名などを登録してください。DeepgramとOpenAIの両方に反映されます（最大{MAX_ENTRIES}件）。
         </p>
 
         {saveError && (
@@ -326,7 +326,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
           />
           <select
             value={sortOrder}
-            onChange={e => setSortOrder(e.target.value as SortOrder)}
+            onChange={e => handleSortOrderChange(e.target.value as SortOrder)}
             className="text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400 bg-white"
           >
             <option value="none">並び順：デフォルト</option>
@@ -336,11 +336,6 @@ export function DictionaryDialog({ open, onClose }: Props) {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="shrink-0">
             CSV読み込み
           </Button>
-          {entries.length < MAX_ENTRIES && (
-            <Button variant="outline" size="sm" onClick={handleAdd} className="shrink-0">
-              + 追加
-            </Button>
-          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -349,6 +344,13 @@ export function DictionaryDialog({ open, onClose }: Props) {
             className="hidden"
           />
         </div>
+        {entries.length < MAX_ENTRIES && (
+          <div className="shrink-0 mt-1.5">
+            <Button variant="outline" size="sm" onClick={handleAdd}>
+              + 追加
+            </Button>
+          </div>
+        )}
 
         {/* Column headers */}
         <div className="flex items-center gap-2 mt-1 shrink-0 px-0.5">
@@ -371,8 +373,7 @@ export function DictionaryDialog({ open, onClose }: Props) {
                       type="text"
                       value={entry.term}
                       onChange={e => handleChange(entry.id, 'term', e.target.value)}
-                      onFocus={() => setFocusedId(entry.id)}
-                      onBlur={e => { setFocusedId(null); handleTermBlur(entry.id, e.target.value, entry.reading); }}
+                      onBlur={e => handleTermBlur(entry.id, e.target.value, entry.reading)}
                       placeholder="社名・人名など"
                       className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400"
                     />
@@ -380,8 +381,6 @@ export function DictionaryDialog({ open, onClose }: Props) {
                       type="text"
                       value={entry.reading}
                       onChange={e => handleChange(entry.id, 'reading', e.target.value)}
-                      onFocus={() => setFocusedId(entry.id)}
-                      onBlur={() => setFocusedId(null)}
                       disabled={isGenerating}
                       placeholder={isGenerating ? '生成中...' : '例：みくしぃ'}
                       className="flex-1 text-sm border border-gray-300 rounded px-2 h-8 focus:outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
