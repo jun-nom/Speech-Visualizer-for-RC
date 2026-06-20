@@ -2,8 +2,8 @@ import { FlowNode, Session } from '../App';
 import { buildSystemPrompt, TEXT_DENSITY_LIMITS } from './systemPrompt';
 import { loadDictionaryTerms } from '../components/DictionaryDialog';
 
-function buildTermsInstruction(): string {
-  const terms = loadDictionaryTerms();
+async function buildTermsInstruction(): Promise<string> {
+  const terms = await loadDictionaryTerms();
   if (terms.length === 0) return '';
   return `\n\n以下の用語が含まれる場合は、必ずこの表記で出力してください：\n${terms.map(t => `- ${t}`).join('\n')}`;
 }
@@ -424,7 +424,7 @@ export async function processTextToNodes(
   const level = informationLevel ?? 'high';
   const nq = nodeQuantity ?? 'medium';
   const td = textDensity ?? 'high';
-  const systemPrompt = buildSystemPrompt(td, level, nq) + buildTermsInstruction();
+  const systemPrompt = buildSystemPrompt(td, level, nq) + await buildTermsInstruction();
   const localApiKey = typeof window !== 'undefined'
     ? localStorage.getItem('speechflow-openai-key') ?? ''
     : '';
@@ -547,7 +547,7 @@ export async function generateFeedback(inputs: string[], textDensity?: string): 
     : '';
 
   if (localApiKey) {
-    const systemPrompt = buildFeedbackSystemPrompt(density) + buildTermsInstruction();
+    const systemPrompt = buildFeedbackSystemPrompt(density) + await buildTermsInstruction();
     const content = await callOpenAI(
       [
         { role: 'system', content: systemPrompt },

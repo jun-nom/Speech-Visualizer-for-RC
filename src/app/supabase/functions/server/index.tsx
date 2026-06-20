@@ -836,6 +836,29 @@ app.post('/make-server-a0d800ba/delete-sessions-bulk', async (c) => {
   }
 });
 
+// Shared dictionary terms (used across all users)
+app.get('/make-server-a0d800ba/dictionary', async (c) => {
+  try {
+    const terms = await kv.get('shared:dictionary');
+    return c.json({ terms: Array.isArray(terms) ? terms : null });
+  } catch (error) {
+    console.log('Error loading dictionary:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+app.post('/make-server-a0d800ba/dictionary', async (c) => {
+  try {
+    const { terms } = await c.req.json();
+    if (!Array.isArray(terms)) return c.json({ error: 'terms must be an array' }, 400);
+    await kv.set('shared:dictionary', terms);
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Error saving dictionary:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
 // Health check
 app.get('/make-server-a0d800ba/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
