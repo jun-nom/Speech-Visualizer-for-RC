@@ -42,7 +42,11 @@ export function TextInputForm({
   userRole = null,
   collapsed = false
 }: TextInputFormProps) {
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(userRole === 'viewer');
+
+  useEffect(() => {
+    if (userRole === 'viewer') setIsHistoryOpen(true);
+  }, [userRole]);
   const [canRestore, setCanRestore] = useState(false);
   const clearedTextRef = useRef<string | null>(null);
   const valueRef = useRef(value);
@@ -163,10 +167,10 @@ export function TextInputForm({
   const inputDisabled = isInputDisabled || (userRole !== null && !canInput);
 
   return (
-    <div className="text-input-form space-y-4">
+    <div className={`text-input-form ${userRole === 'viewer' ? 'flex-1 min-h-0 flex flex-col gap-4' : 'space-y-4'}`}>
       {/* Permission Notice */}
       {!collapsed && userRole && (
-        <div className="p-2 rounded-lg text-xs">
+        <div className="p-2 rounded-lg text-xs flex-shrink-0">
           {userRole === 'input' && (
             <div className="bg-blue-50 text-blue-700 p-2 rounded">
               ✏️ あなたはテキスト入力担当です。スピーチフローにテキストを追加できます。
@@ -269,17 +273,17 @@ export function TextInputForm({
 
       {/* Input History */}
       {!collapsed && (
-      <div className="input-history">
+      <div className={`input-history ${userRole === 'viewer' ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
           <button
             type="button"
             onClick={() => setIsHistoryOpen(prev => !prev)}
-            className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900"
+            className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900 flex-shrink-0"
           >
             入力履歴（{inputHistory.length}件）
             {isHistoryOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           {isHistoryOpen && (
-            <div className="space-y-2 mt-2 max-h-40 overflow-y-auto">
+            <div className={`space-y-2 mt-2 ${userRole === 'viewer' ? 'flex-1 overflow-y-auto' : 'max-h-40 overflow-y-auto'}`}>
               {inputHistory.map((item, index) => (
                 <div
                   key={index}

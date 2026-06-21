@@ -950,8 +950,8 @@ export default function App() {
           )}
 
           {/* Input Form */}
-          <div className={`speech-flow-input-section bg-white ${isViewingOtherUserSession ? 'flex-1' : ''}`}>
-            <div className={`relative ${isInputCollapsed ? 'px-6 py-3 border-t border-gray-200' : 'p-6'}`}>
+          <div className={`speech-flow-input-section bg-white ${isViewingOtherUserSession ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
+            <div className={`relative ${isInputCollapsed ? 'px-6 py-3 border-t border-gray-200' : `p-6${isViewingOtherUserSession ? ' flex-1 min-h-0 flex flex-col' : ''}`}`}>
               <button
                 type="button"
                 onClick={() => setIsInputCollapsed(prev => !prev)}
