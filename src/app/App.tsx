@@ -951,42 +951,31 @@ export default function App() {
 
           {/* Input Form */}
           <div className={`speech-flow-input-section bg-white ${isViewingOtherUserSession ? 'flex-1' : ''}`}>
-            {isInputCollapsed ? (
-              <div className="relative h-14 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setIsInputCollapsed(false)}
-                  className="absolute top-1 right-3 p-2 text-gray-500 bg-gray-100 hover:bg-gray-200 hover:text-gray-700 rounded z-10"
-                >
-                  <ChevronUp className="h-5 w-5" />
-                </button>
-              </div>
-            ) : (
-              <div className="relative p-6">
-                <button
-                  type="button"
-                  onClick={() => setIsInputCollapsed(true)}
-                  className="absolute top-3 right-3 p-2 text-gray-500 bg-gray-100 hover:bg-gray-200 hover:text-gray-700 rounded z-10"
-                >
-                  <ChevronDown className="h-5 w-5" />
-                </button>
-                <TextInputForm
-                  value={currentInput + interimTranscript}
-                  onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
-                  onSubmit={handleSubmitWithVenueCheck}
-                  inputHistory={inputHistory}
-                  informationLevel={informationLevel}
-                  onInformationLevelChange={handleInformationLevelChange}
-                  nodeQuantity={nodeQuantity}
-                  onNodeQuantityChange={handleNodeQuantityChange}
-                  textDensity={textDensity}
-                  onTextDensityChange={handleTextDensityChange}
-                  isProcessing={isProcessing}
-                  isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}
-                  userRole={isViewingOtherUserSession ? 'viewer' : null}
-                />
-              </div>
-            )}
+            <div className={`relative ${isInputCollapsed ? 'px-6 py-3 border-t border-gray-200' : 'p-6'}`}>
+              <button
+                type="button"
+                onClick={() => setIsInputCollapsed(prev => !prev)}
+                className="absolute top-3 right-3 p-2 text-gray-500 bg-gray-100 hover:bg-gray-200 hover:text-gray-700 rounded z-10"
+              >
+                {isInputCollapsed ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              </button>
+              <TextInputForm
+                value={currentInput + interimTranscript}
+                onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
+                onSubmit={handleSubmitWithVenueCheck}
+                inputHistory={inputHistory}
+                informationLevel={informationLevel}
+                onInformationLevelChange={handleInformationLevelChange}
+                nodeQuantity={nodeQuantity}
+                onNodeQuantityChange={handleNodeQuantityChange}
+                textDensity={textDensity}
+                onTextDensityChange={handleTextDensityChange}
+                isProcessing={isProcessing}
+                isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}
+                userRole={isViewingOtherUserSession ? 'viewer' : null}
+                collapsed={isInputCollapsed}
+              />
+            </div>
           </div>
         </div>
 

@@ -23,6 +23,7 @@ interface TextInputFormProps {
   isProcessing?: boolean;
   isInputDisabled?: boolean;
   userRole?: 'input' | 'feedback' | 'viewer' | null;
+  collapsed?: boolean;
 }
 
 export function TextInputForm({
@@ -38,7 +39,8 @@ export function TextInputForm({
   onTextDensityChange,
   isProcessing = false,
   isInputDisabled = false,
-  userRole = null
+  userRole = null,
+  collapsed = false
 }: TextInputFormProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [canRestore, setCanRestore] = useState(false);
@@ -163,7 +165,7 @@ export function TextInputForm({
   return (
     <div className="text-input-form space-y-4">
       {/* Permission Notice */}
-      {userRole && (
+      {!collapsed && userRole && (
         <div className="p-2 rounded-lg text-xs">
           {userRole === 'input' && (
             <div className="bg-blue-50 text-blue-700 p-2 rounded">
@@ -248,7 +250,7 @@ export function TextInputForm({
 
 
       {/* Input Form - Only show for non-viewers */}
-      {userRole !== 'viewer' && (
+      {!collapsed && userRole !== 'viewer' && (
         <form onSubmit={handleSubmit} className="space-y-3">
           <Textarea
             id="rc_speech_text_inptut"
@@ -266,6 +268,7 @@ export function TextInputForm({
       )}
 
       {/* Input History */}
+      {!collapsed && (
       <div className="input-history">
           <button
             type="button"
@@ -301,6 +304,7 @@ export function TextInputForm({
             </div>
           )}
         </div>
+      )}
     </div>
   );
 }
