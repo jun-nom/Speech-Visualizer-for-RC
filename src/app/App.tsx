@@ -475,7 +475,7 @@ export default function App() {
     });
   };
 
-  const createNewSession = async () => {
+  const createNewSession = async (baseSessions?: Session[]) => {
     if (isCreatingSession) return;
     setIsCreatingSession(true);
     try {
@@ -490,8 +490,8 @@ export default function App() {
         isPublic: true
       };
 
-      // 現在のテキスト入力内容をアクティブセッションのドラフトとして保存
-      const sessionsWithDraft = sessions.map(s =>
+      const base = baseSessions ?? sessions;
+      const sessionsWithDraft = base.map(s =>
         s.isActive && currentInput.trim()
           ? { ...s, isActive: false, draftInput: currentInput }
           : { ...s, isActive: false }
@@ -526,8 +526,8 @@ export default function App() {
           setSessions(withActive);
           setInputHistory(newestSession.inputs || []);
         } else {
-          setSessions(filtered);
-          createNewSession();
+          const inactivated = filtered.map(s => ({ ...s, isActive: false }));
+          createNewSession(inactivated);
         }
       } else {
         createNewSession();
@@ -922,32 +922,30 @@ export default function App() {
 
         {/* Main Content Area - Flexible width */}
         <div className="speech-flow-content flex-1 min-w-0 flex flex-col">
-          {/* Speech Flow Canvas - Only show for own sessions */}
-          {!isViewingOtherUserSession && (
-            <div className="speech-flow-canvas-container flex-1 min-h-0 bg-white border-b border-gray-200">
-              <SpeechFlowCanvas
-                nodes={activeSession?.nodes || []}
-                currentSession={currentViewingSession || activeSession}
-                currentUserId={currentUserId}
-                horizontalScroll={horizontalScroll}
-                onHorizontalScrollChange={(v) => {
-                  setHorizontalScroll(v);
-                  localStorage.setItem('speechflow-horizontal-scroll', String(v));
-                }}
-                venueUrl={venueUrl}
-                onVenueUrlChange={(url) => {
-                  setVenueUrl(url);
-                  localStorage.setItem('miro-venue-url', url);
-                  setVenueError('');
-                }}
-                venueIframeSrc={venueIframeSrc}
-                onVenueGo={() => handleVenueGo(venueUrl)}
-                onVenueDisconnect={() => setVenueIframeSrc('')}
-                venueError={venueError}
-                activeTab={activeTab}
-              />
-            </div>
-          )}
+          {/* Speech Flow Canvas - hidden when viewing other user's session to keep Miro iframe alive */}
+          <div className={`speech-flow-canvas-container flex-1 min-h-0 bg-white border-b border-gray-200 ${isViewingOtherUserSession ? 'hidden' : ''}`}>
+            <SpeechFlowCanvas
+              nodes={activeSession?.nodes || []}
+              currentSession={currentViewingSession || activeSession}
+              currentUserId={currentUserId}
+              horizontalScroll={horizontalScroll}
+              onHorizontalScrollChange={(v) => {
+                setHorizontalScroll(v);
+                localStorage.setItem('speechflow-horizontal-scroll', String(v));
+              }}
+              venueUrl={venueUrl}
+              onVenueUrlChange={(url) => {
+                setVenueUrl(url);
+                localStorage.setItem('miro-venue-url', url);
+                setVenueError('');
+              }}
+              venueIframeSrc={venueIframeSrc}
+              onVenueGo={() => handleVenueGo(venueUrl)}
+              onVenueDisconnect={() => setVenueIframeSrc('')}
+              venueError={venueError}
+              activeTab={activeTab}
+            />
+          </div>
 
           {/* Input Form */}
           <div className={`speech-flow-input-section bg-white ${isViewingOtherUserSession ? 'flex-1 min-h-0 flex flex-col' : ''}`}>
