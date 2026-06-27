@@ -109,7 +109,7 @@ export function SessionManager({
     return (
       <div className="session-manager h-full flex flex-col items-center pt-3">
         <Button
-          onClick={onCreateSession}
+          onClick={() => onCreateSession()}
           disabled={isCreatingSession || isLoading}
           className="w-9 h-9 p-0 bg-black text-white"
           title="新規セッション"
@@ -140,8 +140,8 @@ export function SessionManager({
     <div className="session-manager h-full flex flex-col">
       {/* Header */}
       <div className="session-manager-header p-4 border-b border-gray-200">
-        <Button 
-          onClick={onCreateSession} 
+        <Button
+          onClick={() => onCreateSession()}
           disabled={isCreatingSession}
           className="w-full bg-black text-white"
         >
