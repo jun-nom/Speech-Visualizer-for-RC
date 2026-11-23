@@ -1,4 +1,8 @@
+import { TEXT_MODEL_KEY, textModel } from './utils/openaiTextModel';
 import React, { useState, useEffect, useRef } from 'react';
+import { extractMiroBoardId } from './utils/miroBoardId';
+import { LiveVisualization } from './components/LiveVisualization';
+import { MIRO_NODE_WIDTH, MIRO_STYLES, miroNodeGeometry } from './utils/miroCardStyle';
 import { SpeechFlowCanvas } from './components/SpeechFlowCanvas';
 import { TextInputForm, InformationLevel, TextDensity, NodeQuantity } from './components/TextInputForm';
 import { SessionManager } from './components/SessionManager';
@@ -9,7 +13,6 @@ import { toast } from 'sonner@2.0.3';
 import * as api from './utils/api';
 import { SettingsDialog } from './components/SettingsDialog';
 import { LogViewer } from './components/LogViewer';
-import { TranscriptionButton } from './components/TranscriptionButton';
 import { ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
 import { DictionaryDialog } from './components/DictionaryDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
@@ -35,32 +38,8 @@ export interface Session {
 }
 
 const MIRO_BOARD_ID = 'uXjVHMCUsVk=';
-const MIRO_NODE_WIDTH = 620;
 const MIRO_COLUMN_STEP = 700;
 const MIRO_NODE_GAP = 48;
-
-const MIRO_STYLES: Record<string, object> = {
-  title:   { fillColor: '#E2EEFD', borderColor: '#2D9BF0', borderStyle: 'normal', borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
-  fact:    { fillColor: '#FFFFFF',  borderColor: '#2D9BF0', borderStyle: 'dotted', borderWidth: '5', color: '#305BAB', fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '1', textAlign: 'center', textAlignVertical: 'middle' },
-  insight: { fillColor: '#0E46AC', borderColor: '#0E46AC', borderStyle: 'normal', borderWidth: '1', color: '#FFFFFF',  fontFamily: 'noto_sans', fontSize: '37', fillOpacity: '1', borderOpacity: '0', textAlign: 'center', textAlignVertical: 'middle' },
-};
-
-function miroEstimateHeight(content: string, minH: number): number {
-  const LINE_HEIGHT = Math.round(37 * 1.4);
-  const charsPerLine = Math.max(1, Math.floor((MIRO_NODE_WIDTH - 50) / 37));
-  let lines = 0;
-  for (const seg of content.split('\n')) lines += Math.max(1, Math.ceil(seg.length / charsPerLine));
-  return Math.max(minH, lines * LINE_HEIGHT + 80);
-}
-
-function extractMiroBoardId(url: string): string | null {
-  try {
-    const match = new URL(url).pathname.match(/\/(?:board|live-embed)\/([^/?#]+)/);
-    return match ? match[1] : null;
-  } catch {
-    return null;
-  }
-}
 
 type MiroItemLike = {
   data?: { content?: string; title?: string };
@@ -236,8 +215,7 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
   for (let col = 0; col < topicOrder.length; col++) {
     let y = startY - 160;
     for (const node of grouped[topicOrder[col]]) {
-      const minH = node.type === 'title' ? 160 : 200;
-      const height = miroEstimateHeight(node.content, minH);
+      const geometry = miroNodeGeometry(node.content, node.type);
       const esc = node.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
       const content = node.type === 'title' ? `<b>${esc}</b>` : esc;
       try {
@@ -248,7 +226,7 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
             data: { shape: 'round_rectangle', content },
             style: MIRO_STYLES[node.type] ?? MIRO_STYLES.fact,
             position: { x: startX + col * MIRO_COLUMN_STEP, y },
-            geometry: { width: MIRO_NODE_WIDTH, height },
+            geometry,
           }),
         });
         if (res.ok) {
@@ -263,7 +241,7 @@ async function syncNodesToMiro(nodes: FlowNode[], boardId: string, shapeHistory:
         console.error('[Miro] fetch error:', err);
         if (!firstError) firstError = String(err);
       }
-      y += height + MIRO_NODE_GAP;
+      y += geometry.height + MIRO_NODE_GAP;
     }
   }
 
@@ -292,6 +270,11 @@ export default function App() {
   const [inputHistory, setInputHistory] = useState<string[]>([]);
   const [currentInput, setCurrentInput] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState({ pending: [] as string[], interim: '' });
+  const [liveActive, setLiveActive] = useState(false);
+  const [liveRecording, setLiveRecording] = useState(false);
+  const [liveStatusTarget, setLiveStatusTarget] = useState<HTMLDivElement | null>(null);
+  const [liveStartTarget, setLiveStartTarget] = useState<HTMLDivElement | null>(null);
   const [feedback, setFeedback] = useState<{ comments: string[], questions: string[] }>({ comments: [], questions: [] });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
@@ -320,6 +303,9 @@ export default function App() {
   const [venueError, setVenueError] = useState('');
   const [activeTab, setActiveTab] = useState<'html' | 'miro' | 'venue'>('venue');
   const venueEnabled = activeTab === 'venue' && !!venueIframeSrc;
+  const enteredVenueBoard = extractMiroBoardId(venueUrl);
+  const confirmedVenueBoard = enteredVenueBoard && enteredVenueBoard === extractMiroBoardId(venueIframeSrc)
+    ? enteredVenueBoard : null;
   const [venueConnectDialogOpen, setVenueConnectDialogOpen] = useState(false);
   const [pendingAddArgs, setPendingAddArgs] = useState<{ text: string; informationLevel: InformationLevel } | null>(null);
   const [venueDialogUrl, setVenueDialogUrl] = useState('');
@@ -359,12 +345,17 @@ export default function App() {
     return '';
   });
 
+  const [miroToken, setMiroToken] = useState(() => sessionStorage.getItem('speechflow-miro-token') ?? '');
   const [deepgramApiKey, setDeepgramApiKey] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('speechflow-deepgram-key') || '';
     }
     return '';
   });
+
+  const [nodeModel, setNodeModel] = useState(() =>
+    textModel(typeof window === 'undefined' ? undefined : localStorage.getItem(TEXT_MODEL_KEY)),
+  );
 
   const [aiModel, setAiModel] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -595,6 +586,24 @@ export default function App() {
     handleAddToFlow(text, informationLevel);
   };
 
+  useEffect(() => {
+    if (liveActive) setIsInputCollapsed(false);
+  }, [liveActive]);
+
+  const generateFlowNodes = async (
+    text: string, session: Session, level: InformationLevel, visualContext?: string,
+  ): Promise<FlowNode[]> => {
+    const topicCount = new Set(session.nodes.map(node => node.topicId)).size;
+    try {
+      const nodes = await api.processTextToNodes(text, topicCount, session.id, level, nodeQuantity, textDensity, visualContext);
+      return nodes.filter(node => node.type !== 'insight' || node.content !== '追加の分析が必要です');
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.toLowerCase().includes('rate limit')) throw error;
+      toast.error('OpenAI APIのレート制限に達しました。しばらくしてから再試行してください。');
+      return api.generateFallbackNodes(text, topicCount);
+    }
+  };
+
   const handleAddToFlow = async (text: string, informationLevel: InformationLevel) => {
     if (!text.trim() || !activeSession || isProcessing) return;
 
@@ -613,33 +622,13 @@ export default function App() {
 
       setCurrentInput('');
 
-      const uniqueTopicIds = new Set(activeSession.nodes.map(node => node.topicId));
-      const existingTopicCount = uniqueTopicIds.size;
-
       let newNodes: FlowNode[];
-
       try {
-        newNodes = await api.processTextToNodes(text, existingTopicCount, activeSession.id, informationLevel, nodeQuantity, textDensity, pendingVisualContext ?? undefined);
-
-        newNodes = newNodes.filter(node => {
-          if (node.type === 'insight' && node.content === '追加の分析が必要です') return false;
-          return true;
-        });
-      } catch (apiError) {
-        const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
-
-        if (errorMessage === 'API_KEY_UNAVAILABLE') {
-          toast.error('APIキーを設定してください');
-          return;
-        }
-
-        if (errorMessage.toLowerCase().includes('rate limit')) {
-          newNodes = await api.generateFallbackNodes(text, existingTopicCount);
-          toast.error('OpenAI APIのレート制限に達しました。しばらくしてから再試行してください。');
-        } else {
-          toast.error(`処理中にエラーが発生しました: ${errorMessage}`);
-          return;
-        }
+        newNodes = await generateFlowNodes(text, activeSession, informationLevel, pendingVisualContext ?? undefined);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message === 'API_KEY_UNAVAILABLE' ? 'APIキーを設定してください' : `処理中にエラーが発生しました: ${message}`);
+        return;
       }
 
       const updatedSessionsWithNodes = updatedSessions.map(session =>
@@ -879,17 +868,53 @@ export default function App() {
               />
               左右パネル表示
             </label>
-            <TranscriptionButton
-              deepgramApiKey={deepgramApiKey}
-              onTranscript={handleTranscript}
-              onInterimTranscript={handleInterimTranscript}
-              onNewFrame={handleNewFrame}
-            />
+            <LiveVisualization openaiKey={openaiApiKey} deepgramKey={deepgramApiKey} miroToken={miroToken} model={aiModel}
+              venueBoardId={confirmedVenueBoard}
+              startTarget={liveStartTarget}
+              onMiroDestination={(boardId, viewport) => {
+                const embed = new URL(`https://miro.com/app/live-embed/${encodeURIComponent(boardId)}/`);
+                embed.searchParams.set('autoplay', 'true');
+                embed.searchParams.set('moveToViewport', [viewport.x, viewport.y, viewport.width, viewport.height].join(','));
+                setVenueIframeSrc(embed.href);
+                setActiveTab('venue');
+              }}
+              canStart={!!activeSession && activeSession.createdBy === currentUserId}
+              onLiveState={setLiveActive}
+              onRecordingState={setLiveRecording}
+              statusTarget={liveStatusTarget}
+              onManualTranscript={handleTranscript}
+              onManualInterimTranscript={handleInterimTranscript}
+              onManualFrame={handleNewFrame}
+              generateNodes={async (sessionId, text, frame) => {
+                const session = sessions.find(candidate => candidate.id === sessionId && candidate.createdBy === currentUserId);
+                if (!session) throw Error('ライブ可視化のセッションが見つかりません。');
+                const visualContext = frame ? await api.analyzeVideoFrame(frame.split(',')[1]).catch(() => undefined) : undefined;
+                return generateFlowNodes(text, session, informationLevel, visualContext);
+              }}
+              sessionId={activeSession?.id}
+              onLiveTranscript={update => setLiveTranscript(previous => {
+                if (!update) return { pending: [], interim: '' };
+                if ('consumed' in update) return { ...previous, pending: previous.pending.slice(update.consumed) };
+                return update.final
+                  ? { pending: [...previous.pending, update.text], interim: '' }
+                  : { ...previous, interim: update.text };
+              })} />
             <SettingsDialog
               openaiApiKey={openaiApiKey}
               onOpenaiApiKeyChange={handleOpenaiApiKeyChange}
+              nodeModel={nodeModel}
+              onNodeModelChange={model => {
+                setNodeModel(model);
+                localStorage.setItem(TEXT_MODEL_KEY, model);
+              }}
               aiModel={aiModel}
               onAiModelChange={handleAiModelChange}
+              miroToken={miroToken}
+              onMiroTokenChange={token => {
+                setMiroToken(token);
+                if (token) sessionStorage.setItem('speechflow-miro-token', token);
+                else sessionStorage.removeItem('speechflow-miro-token');
+              }}
               deepgramApiKey={deepgramApiKey}
               onDeepgramApiKeyChange={handleDeepgramApiKeyChange}
             />
@@ -940,6 +965,9 @@ export default function App() {
                 setVenueError('');
               }}
               venueIframeSrc={venueIframeSrc}
+              venueUrlConfirmed={!!confirmedVenueBoard}
+              liveRecording={liveRecording}
+              liveStartRef={setLiveStartTarget}
               onVenueGo={() => handleVenueGo(venueUrl)}
               onVenueDisconnect={() => setVenueIframeSrc('')}
               venueError={venueError}
@@ -958,8 +986,8 @@ export default function App() {
                 {isInputCollapsed ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
               </button>
               <TextInputForm
-                value={currentInput + interimTranscript}
-                onChange={(v) => { setCurrentInput(v); setInterimTranscript(''); }}
+                value={liveActive ? [...liveTranscript.pending, liveTranscript.interim].filter(Boolean).join('\n') : currentInput + interimTranscript}
+                onChange={(v) => { if (!liveActive) { setCurrentInput(v); setInterimTranscript(''); } }}
                 onSubmit={handleSubmitWithVenueCheck}
                 inputHistory={inputHistory}
                 informationLevel={informationLevel}
@@ -969,6 +997,8 @@ export default function App() {
                 textDensity={textDensity}
                 onTextDensityChange={handleTextDensityChange}
                 isProcessing={isProcessing}
+                liveReadOnly={liveActive}
+                liveStatusRef={setLiveStatusTarget}
                 isInputDisabled={!activeSession || activeSession.createdBy !== currentUserId}
                 userRole={isViewingOtherUserSession ? 'viewer' : null}
                 collapsed={isInputCollapsed}

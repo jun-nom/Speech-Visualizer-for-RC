@@ -22,6 +22,8 @@ interface TextInputFormProps {
   onTextDensityChange?: (density: TextDensity) => void;
   isProcessing?: boolean;
   isInputDisabled?: boolean;
+  liveReadOnly?: boolean;
+  liveStatusRef?: (element: HTMLDivElement | null) => void;
   userRole?: 'input' | 'feedback' | 'viewer' | null;
   collapsed?: boolean;
 }
@@ -39,6 +41,8 @@ export function TextInputForm({
   onTextDensityChange,
   isProcessing = false,
   isInputDisabled = false,
+  liveReadOnly = false,
+  liveStatusRef,
   userRole = null,
   collapsed = false
 }: TextInputFormProps) {
@@ -70,7 +74,7 @@ export function TextInputForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (value.trim()) {
+    if (!liveReadOnly && value.trim()) {
       onSubmit(value, informationLevel);
     }
   };
@@ -78,7 +82,7 @@ export function TextInputForm({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      if (value.trim()) {
+      if (!liveReadOnly && value.trim()) {
         onSubmit(value, informationLevel);
       }
     }
@@ -195,7 +199,7 @@ export function TextInputForm({
           <div className="flex items-center gap-2">
             <Button
               onClick={() => onSubmit(value, informationLevel)}
-              disabled={!value.trim() || isProcessing || inputDisabled}
+              disabled={!value.trim() || isProcessing || inputDisabled || liveReadOnly}
               size="sm"
               title={inputDisabled && userRole !== 'input' ? 'テキスト入力担当者のみ使用できます' : ''}
             >
@@ -243,7 +247,7 @@ export function TextInputForm({
               variant="outline"
               size="sm"
               onClick={canRestore ? handleRestore : handleClear}
-              disabled={(!canRestore && !value.trim()) || inputDisabled}
+              disabled={(!canRestore && !value.trim()) || inputDisabled || liveReadOnly}
               className="text-xs h-8 px-3"
             >
               {canRestore ? '復元' : 'Clear'}
@@ -256,17 +260,21 @@ export function TextInputForm({
       {/* Input Form - Only show for non-viewers */}
       {!collapsed && userRole !== 'viewer' && (
         <form onSubmit={handleSubmit} className="space-y-3">
-          <Textarea
-            id="rc_speech_text_inptut"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={inputDisabled ? 'テキスト入力権限がありません' : 'スピーチ内容を入力してください...'}
-            className="h-[80px] resize-none"
-            disabled={inputDisabled}
-          />
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <Textarea
+              id="rc_speech_text_inptut"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={liveReadOnly ? 'YouTube の文字起こしを待っています…' : inputDisabled ? 'テキスト入力権限がありません' : 'スピーチ内容を入力してください...'}
+              readOnly={liveReadOnly}
+              className="h-[80px] min-w-0 flex-1 resize-none"
+              disabled={inputDisabled}
+            />
+            {liveStatusRef && <div ref={liveStatusRef} className="empty:hidden sm:w-48 sm:shrink-0" />}
+          </div>
           <p className="text-xs text-gray-500">
-            Ctrl+Enter または Cmd+Enter で送信できます
+            {liveReadOnly ? '文字起こしからノードを自動生成して Miro に送信します' : 'Ctrl+Enter または Cmd+Enter で送信できます'}
           </p>
         </form>
       )}

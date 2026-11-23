@@ -1,3 +1,5 @@
+import { textCompletionBody, textModel } from '../../src/app/utils/openaiTextModel';
+
 interface Env {
   OPENAI_API_KEY?: string;
 }
@@ -9,7 +11,8 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
     return Response.json({ error: 'OPENAI_API_KEY not configured' }, { status: 500 });
   }
 
-  const { messages, max_tokens = 1000, temperature = 0.2 } = await context.request.json() as {
+  const { model, messages, max_tokens = 1000, temperature = 0.2 } = await context.request.json() as {
+    model?: string;
     messages: object[];
     max_tokens?: number;
     temperature?: number;
@@ -25,7 +28,7 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
       'Authorization': `Bearer ${openaiApiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: 'gpt-4o', messages, temperature, max_tokens }),
+    body: JSON.stringify(textCompletionBody(textModel(model), messages, max_tokens, temperature)),
   });
 
   if (!res.ok) {

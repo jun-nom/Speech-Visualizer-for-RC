@@ -11,8 +11,12 @@ import { toast } from 'sonner@2.0.3';
 interface SettingsDialogProps {
   openaiApiKey: string;
   onOpenaiApiKeyChange: (key: string) => void;
+  nodeModel: string;
+  onNodeModelChange: (model: string) => void;
   aiModel: string;
   onAiModelChange: (model: string) => void;
+  miroToken: string;
+  onMiroTokenChange: (token: string) => void;
   deepgramApiKey: string;
   onDeepgramApiKeyChange: (key: string) => void;
 }
@@ -20,8 +24,12 @@ interface SettingsDialogProps {
 export function SettingsDialog({
   openaiApiKey,
   onOpenaiApiKeyChange,
+  nodeModel,
+  onNodeModelChange,
   aiModel,
   onAiModelChange,
+  miroToken,
+  onMiroTokenChange,
   deepgramApiKey,
   onDeepgramApiKeyChange,
 }: SettingsDialogProps) {
@@ -30,14 +38,18 @@ export function SettingsDialog({
   const [deepgramStatus, setDeepgramStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
 
   const [localOpenaiApiKey, setLocalOpenaiApiKey] = useState(openaiApiKey);
+  const [localNodeModel, setLocalNodeModel] = useState(nodeModel);
   const [localAiModel, setLocalAiModel] = useState(aiModel);
+  const [localMiroToken, setLocalMiroToken] = useState(miroToken);
   const [localDeepgramApiKey, setLocalDeepgramApiKey] = useState(deepgramApiKey);
 
   useEffect(() => {
     setLocalOpenaiApiKey(openaiApiKey);
+    setLocalNodeModel(nodeModel);
     setLocalAiModel(aiModel);
+    setLocalMiroToken(miroToken);
     setLocalDeepgramApiKey(deepgramApiKey);
-  }, [openaiApiKey, aiModel, deepgramApiKey]);
+  }, [openaiApiKey, nodeModel, aiModel, deepgramApiKey, miroToken]);
 
   const checkOpenaiApiKey = async (apiKey: string) => {
     if (!apiKey.trim()) {
@@ -113,15 +125,19 @@ export function SettingsDialog({
 
   const handleSave = () => {
     onOpenaiApiKeyChange(localOpenaiApiKey);
+    onNodeModelChange(localNodeModel);
     onAiModelChange(localAiModel);
     onDeepgramApiKeyChange(localDeepgramApiKey);
+    onMiroTokenChange(localMiroToken.trim());
     setIsOpen(false);
     toast.success('設定を保存しました');
   };
 
   const handleCancel = () => {
     setLocalOpenaiApiKey(openaiApiKey);
+    setLocalNodeModel(nodeModel);
     setLocalAiModel(aiModel);
+    setLocalMiroToken(miroToken);
     setLocalDeepgramApiKey(deepgramApiKey);
     setIsOpen(false);
   };
@@ -180,14 +196,27 @@ export function SettingsDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ai-model">AIモデル</Label>
+            <Label htmlFor="node-model">テキスト処理モデル</Label>
+            <Select value={localNodeModel} onValueChange={setLocalNodeModel}>
+              <SelectTrigger id="node-model"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gpt-5.4-mini">GPT-5.4 mini</SelectItem>
+                <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                <SelectItem value="gpt-4o-mini">GPT-4o mini</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ai-model">Miro の配置・再整理モデル</Label>
             <Select value={localAiModel} onValueChange={setLocalAiModel}>
-              <SelectTrigger>
+              <SelectTrigger id="ai-model">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="gpt-5.4-mini">GPT-5.4 mini</SelectItem>
                 <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                <SelectItem value="gpt-4o-mini">GPT-4o mini</SelectItem>
                 <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
                 <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
               </SelectContent>
@@ -219,6 +248,13 @@ export function SettingsDialog({
               className="font-mono text-sm"
             />
           </div>
+
+          {!import.meta.env.DEV && <div className="space-y-2">
+            <Label htmlFor="miro-token">Miro アクセストークン</Label>
+            <Input id="miro-token" type="password" value={localMiroToken} autoComplete="off"
+              onChange={event => setLocalMiroToken(event.target.value)} />
+            <p className="text-xs text-muted-foreground">自動Miro描画に使用します。このタブを閉じるまで保持されます。</p>
+          </div>}
 
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={handleCancel}>キャンセル</Button>

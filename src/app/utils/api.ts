@@ -1,3 +1,4 @@
+import { TEXT_MODEL_KEY, textCompletionBody, textModel } from './openaiTextModel';
 import { FlowNode, Session } from '../App';
 import { buildSystemPrompt, TEXT_DENSITY_LIMITS } from './systemPrompt';
 import { loadDictionaryEntries } from '../components/DictionaryDialog';
@@ -89,11 +90,11 @@ const NODE_QUANTITY_LIMITS: Record<string, { facts: number; insights: number }> 
 
 const CHAR_LIMITS: Record<string, number> = { high: 90, medium: 56, low: 32 };
 
-async function callOpenAIDirect(messages: object[], apiKey: string, maxTokens: number, temperature: number): Promise<string> {
+async function callOpenAIDirect(messages: object[], apiKey: string, maxTokens: number, temperature: number, model: string): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'gpt-4o', messages, temperature, max_tokens: maxTokens }),
+    body: JSON.stringify(textCompletionBody(model, messages, maxTokens, temperature)),
     signal: AbortSignal.timeout(30000),
   });
   if (!response.ok) throw new Error(`OpenAI error: ${response.status}`);
@@ -107,14 +108,15 @@ async function callOpenAI(
   maxTokens = 1000,
   temperature = 0.2
 ): Promise<string> {
+  const model = textModel(typeof window === 'undefined' ? undefined : localStorage.getItem(TEXT_MODEL_KEY));
   if (localApiKey) {
-    return callOpenAIDirect(messages, localApiKey, maxTokens, temperature);
+    return callOpenAIDirect(messages, localApiKey, maxTokens, temperature, model);
   }
 
   const response = await fetch('/api/process-text', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, max_tokens: maxTokens, temperature }),
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
     signal: AbortSignal.timeout(30000),
   });
   if (!response.ok) throw new Error('API_KEY_UNAVAILABLE');

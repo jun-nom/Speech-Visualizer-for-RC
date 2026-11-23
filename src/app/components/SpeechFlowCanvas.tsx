@@ -15,13 +15,17 @@ interface SpeechFlowCanvasProps {
   venueUrl: string;
   onVenueUrlChange: (url: string) => void;
   venueIframeSrc: string;
+  venueUrlConfirmed: boolean;
+  liveRecording: boolean;
+  liveStartRef?: (element: HTMLDivElement | null) => void;
   onVenueGo: () => void;
   onVenueDisconnect: () => void;
   venueError?: string;
   activeTab: 'html' | 'miro' | 'venue';
 }
 
-export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, onHorizontalScrollChange, venueUrl, onVenueUrlChange, venueIframeSrc, onVenueGo, onVenueDisconnect, venueError, activeTab }: SpeechFlowCanvasProps) {
+export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizontalScroll = false, onHorizontalScrollChange, venueUrl, onVenueUrlChange, venueIframeSrc, venueUrlConfirmed, liveRecording, liveStartRef, onVenueGo, onVenueDisconnect, venueError, activeTab }: SpeechFlowCanvasProps) {
+  const venueControlSize = liveRecording ? 'h-9 text-sm' : 'h-14 text-lg';
   const groupedNodes = React.useMemo(() => {
     const groups: { [topicId: string]: FlowNodeType[] } = {};
     nodes.forEach(node => {
@@ -260,30 +264,25 @@ export function SpeechFlowCanvas({ nodes, currentSession, currentUserId, horizon
 
       {/* Miro会場 tab */}
       <div className={`flex flex-col flex-1 min-h-0 ${activeTab !== 'venue' ? 'hidden' : ''}`}>
-        {(() => {
-          const unconnected = !venueIframeSrc;
-          const barH = unconnected ? 'py-3' : 'py-2';
-          const inputH = unconnected ? 'h-14 text-xl' : 'h-7 text-xs';
-          const btnH = unconnected ? 'h-14 px-4 text-xl' : 'h-7 px-3 text-xs';
-          const blinkClass = unconnected ? 'venue-url-blink' : '';
-          return (
-            <div className={`px-3 ${barH} bg-white border-b border-gray-100 flex-shrink-0 flex items-center gap-2`}>
-              <input
-                type="text"
-                value={venueUrl}
-                onChange={e => onVenueUrlChange(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && onVenueGo()}
-                placeholder="https://miro.com/app/board/..."
-                className={`flex-1 border border-gray-300 rounded px-2 min-w-0 ${inputH} ${blinkClass}`}
-              />
-              {venueIframeSrc ? (
-                <Button size="sm" variant="outline" onClick={onVenueDisconnect} className={`shrink-0 ${btnH}`}>Disconnect</Button>
-              ) : (
-                <Button size="sm" onClick={onVenueGo} className={`shrink-0 ${btnH}`}>Connect</Button>
-              )}
-            </div>
-          );
-        })()}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5">
+          <input
+            type="url"
+            aria-label="Miro ボードの URL"
+            value={venueUrl}
+            onChange={e => onVenueUrlChange(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && onVenueGo()}
+            placeholder="https://miro.com/app/board/..."
+            className={`${venueControlSize} min-w-36 flex-1 rounded-md border border-slate-300 bg-slate-50 px-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100`}
+          />
+          <div className="flex shrink-0 items-center gap-2">
+            {venueUrlConfirmed ? (
+              <Button variant="outline" className={venueControlSize} onClick={onVenueDisconnect}>Disconnect</Button>
+            ) : (
+              <Button variant="outline" className={venueControlSize} onClick={onVenueGo}>Connect</Button>
+            )}
+            <div ref={liveStartRef} className="flex items-center" title={!venueUrlConfirmed ? 'Connect で Miro の URL を確定してください' : undefined} />
+          </div>
+        </div>
         {venueIframeSrc ? (
           <iframe
             src={venueIframeSrc}
